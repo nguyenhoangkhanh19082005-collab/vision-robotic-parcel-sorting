@@ -1,0 +1,285 @@
+station:
+  name: "Vision Station 01"
+  save_debug_images: true
+  capture_directory: "captures"
+
+camera:
+  index: 0
+  backend: "msmf"
+  width: 2560
+  height: 1440
+  fps: 30
+  # The Stafor sample set negotiated YUY2 at 2560x1440 / 30 FPS.
+  fourcc: "YUY2"
+  # Stafor 2K is fixed-focus (verified 2026-10-30: focus 0..255 changes nothing on
+  # MSMF or DShow). Sharpness can only be changed optically; see scripts/focus_assist.py.
+  autofocus: null
+  focus: null
+  # Fixed exposure (log2 seconds, -7 ~ 1/128 s) for the conveyor station with the
+  # livestream lamp, 2026-10-31. Auto exposure meters on the dark wood and clips
+  # the white label: per-frame QR decode was 33-50 % on auto vs 93-100 % at -7.
+  # Re-measure (tmp/_review/exp4.py) after changing lamp brightness/position.
+  # null = auto exposure.
+  exposure: -7
+  gain: null
+  warmup_frames: 12
+
+installation:
+  # Mechanical height: lens/front glass to the empty conveyor surface.
+  camera_to_belt_cm: 40.0
+  # Optical distance is camera_to_belt_cm - parcel_height_cm for a top-down label.
+  # The current Stafor sample set is sharpest at 35-40 cm lens-to-label distance.
+  target_label_distance_cm: [35.0, 40.0]
+  view: "top_down"
+
+acquisition:
+  burst_frames: 15
+  stable_frames: 4
+  motion_threshold: 3.5
+  # Station gates, calibrated 2026-10-31 on the conveyor fixture at exposure -7:
+  # a still label measures Laplacian 2.78-2.84 / Tenengrad 359-375 with 100 % QR
+  # decode, so the gates sit ~75-80 % below that to reject motion-blurred frames.
+  # Both values scale with exposure/lamp brightness: re-calibrate after changes.
+  # (Previous 30 cm dataset gates: Laplacian 12.5, Tenengrad 1180.)
+  min_laplacian: 2.2
+  min_tenengrad: 280.0
+  max_highlight_ratio: 0.03
+  # BENCH = temporary floor/desk setup (looser motion gate, bench background).
+  # 2026-11-21: the conveyor fixture, lamp and background are final, so the GUI
+  # starts in conveyor mode (gates above, config/calibration/empty_belt.png).
+  bench_mode_default: false
+  bench:
+    stable_frames: 2
+    motion_threshold: 4.5
+    # Same sharpness calibration as above (was 3.0 / 450 before exposure -7).
+    min_laplacian: 2.2
+    min_tenengrad: 280.0
+    max_highlight_ratio: 0.06
+
+label:
+  # Fractions relative to the full camera frame: [x, y, width, height].
+  # Broad fixed search window at the tested 20 cm camera position.
+  roi: [0.14, 0.02, 0.60, 0.96]
+  # A6 portrait at 10 pixels/mm.
+  rectify_width: 1050
+  rectify_height: 1480
+  # QR crop on the rectified label (QR target below plus a margin).
+  qr_roi: [0.70, 0.38, 0.28, 0.22]
+  rectification:
+    enabled: true
+    method: "qr_anchor"
+    # "similarity" (rotation + scale + shift, least squares on the 4 QR corners) for
+    # the top-down camera. The exact "perspective" homography turned 2 px of QR
+    # corner noise into skew at the logo: logo detected 26-34/42 frames with
+    # +-2..4 px corner jitter vs 42/42 with similarity (2026-11-01, 0 false positives).
+    transform: "similarity"
+    # Destination of the QR within the canonical 1050x1480 image.
+    # The QR is physically square, so it must be square in pixels too:
+    # 0.20 * 1050 = 210 px = 0.141892 * 1480. The previous [0.70, 0.54, 0.20, 0.20]
+    # gave 210x296 px and stretched the label 1.41x vertically. This is the geometry
+    # the operator logo template (Shopee XPRESS) was calibrated with; the stacked
+    # Shopee SPX label also fits inside it. The rectifier enforces square pixels
+    # from the width value regardless of the height entered here.
+    qr_target_roi: [0.742857, 0.418919, 0.20, 0.141892]
+    min_area_ratio: 0.20
+    canny_low: 50
+    canny_high: 150
+
+qr:
+  try_inverted: true
+  upscale: 2.0
+  # Hard 25/30 cm samples were recovered by adding a second 3x attempt.
+  upscales: [2.0, 3.0]
+
+package_detection:
+  # QR-anchored target selection: the parcel that owns the decoded QR is boxed,
+  # even when another parcel, a hand or the floor is visible in the same frame.
+  # QR position inside the *visible* label as [x, y, w, h] fractions; only used to
+  # estimate the label/parcel box. Independent of label.rectification.qr_target_roi
+  # (which must stay square for an undistorted label image).
+  label_qr_roi: [0.70, 0.54, 0.20, 0.20]
+  live_interval_frames: 10
+  live_max_dimension: 1280
+  live_border_margin_ratio: 0.015
+  canny_low: 40
+  canny_high: 120
+  projection_blur: 41
+  min_edge_projection: 12
+  relative_edge_projection: 0.25
+  max_side_expansion: 1.15
+  fallback_side_expansion: 0.38
+  vertical_padding_ratio: 0.025
+
+logo:
+  enabled: true
+  template_path: "assets/logo/spx_template.png"
+  # GUI calibration overrides are stored beside the executable and reused at startup.
+  calibration_path: "config/calibration/logo_calibration.json"
+  min_template_width_px: 80
+  min_template_height_px: 30
+  min_template_features: 12
+  # Search area on the canonical 1050x1480 A6 image.
+  search_roi: [0.18, 0.08, 0.44, 0.23]
+  # Bench validation: 10/10 current Shopee Xpress labels passed; blank/background
+  # controls remained negative with the calibrated operator template.
+  # Operator calibration refuses a template softer than this (Laplacian variance).
+  # 8.0 suited the 30-40 cm dataset; the sharpest logo crop at the current station
+  # (exposure -7) measures 6.6, and a template should match the runtime blur.
+  # 2026-11-10: on a real parcel the label sits above the focus plane; the logo
+  # crop measures 3.4. Template recaptured there: 20/20 detected, 0/20 with the
+  # logo blanked (max score 0.06).
+  min_template_sharpness: 3.0
+  # Additional label layouts. The primary template above is the operator-calibrated
+  # one (Shopee XPRESS); calibration never overwrites these extras.
+  extra_templates:
+    - name: "spx_stacked"
+      # Cropped at 40 cm from dataset/raw on the square-QR canonical label.
+      path: "assets/logo/spx_stacked_template.png"
+      search_roi: [0.18, 0.04, 0.40, 0.26]
+  threshold: 0.12
+  # 6 (was 8): with the 2026-10-31 station template, every miss scored 0.13-0.15
+  # but had 6-7 good matches. 55/55 station frames detected, 0/55 false positives
+  # with the logo blanked out (max score 0.02).
+  min_good_matches: 6
+  min_inlier_ratio: 0.40
+  match_ratio: 0.76
+
+damage:
+  enabled: true
+  # Must be captured with the conveyor empty and the final lighting/camera position.
+  background_path: "config/calibration/empty_belt.png"
+  # Captured from the GUI with no parcel in view for the current floor/desk setup.
+  bench_background_path: "config/calibration/empty_bench.png"
+  roi: [0.02, 0.02, 0.96, 0.96]
+  difference_threshold: 25
+  blur_kernel: 9
+  morphology_kernel: 11
+  require_full_contour: true
+  border_margin_px: 10
+  min_package_area_ratio: 0.08
+  min_rectangularity: 0.82
+  min_solidity: 0.95
+  approx_epsilon_ratio: 0.025
+  max_vertices: 8
+  min_hole_area_ratio: 0.002
+  hole_border_margin_px: 9
+  # --- QR-anchored target inspection (redesign 2026-11-04, docs/vision_redesign.md) ---
+  # Lengths below are in QR side units, so they hold at any camera height.
+  # 1) Label tear, no background needed: label paper = pixels brighter than
+  #    ratio x the QR quiet zone and within max_chroma of its colour.
+  label_paper_lightness_ratio: 0.80
+  label_paper_max_chroma: 7.0
+  label_close_qr: 0.20          # fills print/barcode inside the label
+  label_open_qr: 0.20           # cuts thin bright leaks (belt rails)
+  label_max_notch_qr: 0.27      # station: intact <= 0.16, torn 0.39-0.41
+  label_min_area_qr2: 4.0
+  require_label_check: true     # label not measurable -> MANUAL_REVIEW
+  # 2) Parcel outline from the empty-scene reference: component holding the QR.
+  max_background_change: 0.05   # changed share of the scene outside the parcel
+  max_parcel_area_ratio: 0.70   # above this the reference no longer matches
+  parcel_open_qr: 0.15          # cut moving-belt glare / cable tails
+  parcel_max_notch_qr: 0.40
+  # Outline skipped (stale reference) still allows PASS on label + QR + logo when
+  # false; true sends such parcels to MANUAL_REVIEW.
+  require_parcel_outline: false
+  # 3) Holes strictly inside the parcel, away from its edge and the label.
+  surface_hole_contrast: 45
+  surface_hole_max_aspect: 3.2
+  hole_min_diameter_qr: 0.10
+
+classification:
+  # Test QR/logo/damage locally while Supabase is not commissioned.
+  local_test_mode: true
+  local_test_bin: "LOCAL_TEST"
+  reject_bin: "REJECT"
+  label_reject_bin: "REJECT"
+  defect_bin: "DEFECT"
+  unknown_bin: "MANUAL_REVIEW"
+  # Cột của bảng orders chứa số sọt đích.
+  destination_field: "destination_chute_id"
+  require_qr: true
+  require_waybill: true
+  require_logo: true
+  require_damage_check: true
+
+audit:
+  enabled: true
+  directory: "captures"
+  # Retain the complete field view for local monitoring and later audit review.
+  save_full_frame: true
+  save_label_image: true
+  save_debug_images: true
+
+digital_twin:
+  # Keep the software scene until the commissioned GLB assets are available.
+  viewer: "placeholder"
+  manifest_path: "assets/digital_twin/scene_manifest.json"
+  preferred_format: "glb"
+
+controller:
+  # Manual UDP control only; no conveyor automation or speed feedback.
+  host: "192.168.2.100"
+  port: 8120
+  default_speed: 150
+
+supabase:
+  # Bật sau khi đã đặt SUPABASE_URL / SUPABASE_KEY trong .env và đặt
+  # classification.local_test_mode: false. Xem docs/HUONG_DAN_UPLOAD_TRANG_THAI.md.
+  enabled: false
+  # Tra cứu đơn hàng: bảng orders, khóa là mã vận đơn trong QR.
+  table: "orders"
+  waybill_column: "tracking_code"
+  select_columns: "id,tracking_code,destination_chute_id,destination_hub,routing_code,status"
+  # Ghi kết quả kiểm tra: mỗi lần kiểm tra thêm một dòng vào sorting_logs.
+  upload_results: true
+  log_table: "sorting_logs"
+  station_id: "VISION-01"
+  scanned_from: "MACHINE_VISION"
+  # Sọt nhận kiện bị loại / cần kiểm tra lại (kiện móp, thủng, tem lỗi, mã lạ).
+  reject_chute_id: 0
+  unknown_tracking_code: "UNKNOWN"
+  # Giá trị ghi vào cột sorting_logs.status theo từng quyết định.
+  status_map:
+    PASS: "SORTED"
+    REJECT: "REJECTED"
+    MANUAL_REVIEW: "MANUAL_REVIEW"
+  # Kết quả chưa gửi được (mất mạng) nằm ở đây và tự gửi lại ở lần kiểm tra sau.
+  outbox: "captures/supabase_outbox.jsonl"
+
+station_cycle:
+  # CHẠY TỰ ĐỘNG (tab BĂNG TẢI / ESP32), services/station_cycle.py.
+  # Cảm biến thấy kiện -> ESP32 tự dừng sau auto_stop_delay_ms (kiện nằm dưới camera)
+  # -> chờ settle_s -> chụp loạt ảnh MỚI -> kiểm tra -> ghi Supabase -> FWD tới điểm gắp.
+  # PWM chạy lấy từ thanh trượt của tab băng tải; đặt "speed" ở đây để cố định.
+  event_port: 8121
+  # Chỉnh khi lắp: khoảng cách cảm biến -> tâm khung hình / tốc độ băng tải.
+  auto_stop_delay_ms: 300
+  # Nếu mất gói AUTOSTOP, PC tự gửi STOP sau delay + grace. Phải ngắn hơn thời gian
+  # kiện đi qua cảm biến, nếu không kiện sẽ trôi khỏi camera.
+  stop_grace_s: 0.8
+  settle_s: 0.4
+  # Chụp lại tối đa 2 lần khi ảnh mờ/chói; vẫn lỗi thì ghi MANUAL_REVIEW (sọt loại).
+  quality_retries: 2
+  # Kiện phải rời cảm biến trong thời gian này sau khi cho chạy tiếp, nếu không: dừng + FAULT.
+  release_timeout_s: 6.0
+  poll_s: 0.25
+
+# ---------------------------------------------------------------------------
+# Khổ tem vận đơn. Đổi một dòng này khi chuyển sang tem A7; mỗi khổ giữ mẫu logo
+# và file hiệu chỉnh riêng (LẤY MẪU LOGO trong GUI ghi vào đúng khổ đang chọn).
+# Mọi ngưỡng hình học (rách nhãn, lỗ thủng, móp viền) tính theo cạnh QR nên không
+# phụ thuộc khổ tem. Nắn nhãn neo theo QR: nếu bố cục A7 là A6 thu nhỏ thì ảnh nhãn
+# chuẩn hóa giống hệt A6, chỉ độ phân giải thấp hơn (cạnh QR ~0,705 lần).
+# ---------------------------------------------------------------------------
+label_format: "A6"
+label_formats:
+  A6:
+    logo:
+      template_path: "assets/logo/spx_template.png"
+      calibration_path: "config/calibration/logo_calibration.json"
+  A7:
+    # 74 x 105 mm. Mẫu logo tạm sinh từ mẫu A6 (scripts/simulate_a7_label.py
+    # --make-template); thay bằng LẤY MẪU LOGO trên tem A7 thật khi có tem.
+    logo:
+      template_path: "assets/logo/spx_template_a7.png"
+      calibration_path: "config/calibration/logo_calibration_a7.json"
