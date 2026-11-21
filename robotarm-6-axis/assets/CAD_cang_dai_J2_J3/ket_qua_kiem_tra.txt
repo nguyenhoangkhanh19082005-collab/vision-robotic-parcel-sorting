@@ -1,0 +1,26 @@
+
+===== J2: vỏ AX-1_3, puly lớn Riemenscheibe_55mm / puly nhỏ Riemenscheibe_16mm, khoảng cách tâm 72.6 mm, mặt phẳng giữa đai w = -4.0 =====
+  lỗ vít/hốc đai ốc (tâm uv, r, w): (-36,57) r3.0 w-46..11, (44,51) r3.0 w-46..11, (44,51) r1.8 w-52..-46, (-36,57) r1.8 w-52..-46, (37,32) r1.8 w-1..5, (-3,-35) r1.8 w-1..5, (-32,37) r1.8 w-1..5, (29,75) r1.8 w-42..-18, (-17,80) r1.8 w-42..-18, (-19,54) r1.8 w-42..-18, (27,51) r1.8 w-42..-18
+  nhánh 0: f = 0.280 (19.6 mm dọc nhánh từ điểm rời puly lớn, 0.5 = giữa nhánh), que nghiêng +15° so với pháp tuyến đai; lưng đai → mặt trong thành 19.4 mm, → mặt ngoài 21.9 mm; đáy vỏ cách trục que 13.5 mm, mép hở cách trục que 9.0 mm; khối trụ dài 21.0 mm, thêm +1.74 cm3; cách lỗ vít gần nhất ≥ 1.8 mm
+           chiều dài que tính từ MẶT NGOÀI vỏ: chạm lưng đai = 21.9 mm; ép vào 5 / 8 / 10 mm = 26.9 / 29.9 / 31.9 mm (mẩu đũa đang dùng 31–33 mm)
+  nhánh 1: f = 0.280 (19.6 mm dọc nhánh từ điểm rời puly lớn, 0.5 = giữa nhánh), que nghiêng -15° so với pháp tuyến đai; lưng đai → mặt trong thành 19.6 mm, → mặt ngoài 22.1 mm; đáy vỏ cách trục que 13.5 mm, mép hở cách trục que 9.0 mm; khối trụ dài 21.1 mm, thêm +1.74 cm3; cách lỗ vít gần nhất ≥ 1.6 mm
+           chiều dài que tính từ MẶT NGOÀI vỏ: chạm lưng đai = 22.1 mm; ép vào 5 / 8 / 10 mm = 27.1 / 30.1 / 32.1 mm (mẩu đũa đang dùng 31–33 mm)
+  vỏ gốc hợp lệ: True; vỏ mới hợp lệ: True, thể tích 98.83 → 102.31 cm3
+  phần thêm chạm chi tiết khác: KHÔNG
+  phần thêm lòi ra ngoài vỏ: KHÔNG (1423 điểm kiểm tra)
+  que nhánh 0 (ép 10 mm) chạm: KHÔNG (chỉ chạm lưng đai)
+  que nhánh 1 (ép 10 mm) chạm: KHÔNG (chỉ chạm lưng đai)
+
+===== J3: vỏ AX-2_1, puly lớn Riemenscheibe_40mm / puly nhỏ Riemenscheibe_16mm, khoảng cách tâm 83.8 mm, mặt phẳng giữa đai w = 5.5 =====
+  lỗ vít/hốc đai ốc (tâm uv, r, w): (1,48) r3.0 w-36..-29, (38,64) r4.5 w-7..10, (-34,66) r4.5 w-7..10, (-34,66) r1.8 w3..10, (38,64) r1.8 w3..10, (-1,-36) r1.8 w3..10, (1,48) r1.8 w-41..-36, (25,58) r1.8 w-26..-8, (26,87) r1.8 w-26..-8, (-21,88) r1.8 w-26..-8, (-22,59) r1.8 w-26..-8
+  nhánh 0: f = 0.500 (41.4 mm dọc nhánh từ điểm rời puly lớn, 0.5 = giữa nhánh), que nghiêng +0° so với pháp tuyến đai; lưng đai → mặt trong thành 26.7 mm, → mặt ngoài 29.3 mm; đáy vỏ cách trục que 12.5 mm, mép hở cách trục que 5.0 mm; khối trụ dài 29.1 mm, thêm +3.75 cm3; cách lỗ vít gần nhất ≥ 5.8 mm
+           chiều dài que tính từ MẶT NGOÀI vỏ: chạm lưng đai = 29.3 mm; ép vào 5 / 8 / 10 mm = 34.3 / 37.3 / 39.3 mm (mẩu đũa đang dùng 35–37 mm)
+  nhánh 1: f = 0.500 (41.4 mm dọc nhánh từ điểm rời puly lớn, 0.5 = giữa nhánh), que nghiêng +0° so với pháp tuyến đai; lưng đai → mặt trong thành 26.6 mm, → mặt ngoài 29.1 mm; đáy vỏ cách trục que 12.5 mm, mép hở cách trục que 5.0 mm; khối trụ dài 29.0 mm, thêm +3.72 cm3; cách lỗ vít gần nhất ≥ 5.9 mm
+           chiều dài que tính từ MẶT NGOÀI vỏ: chạm lưng đai = 29.1 mm; ép vào 5 / 8 / 10 mm = 34.1 / 37.1 / 39.1 mm (mẩu đũa đang dùng 35–37 mm)
+  vỏ gốc hợp lệ: True; vỏ mới hợp lệ: True, thể tích 65.23 → 72.70 cm3
+  phần thêm chạm chi tiết khác: KHÔNG
+  phần thêm lòi ra ngoài vỏ: KHÔNG (1529 điểm kiểm tra)
+  que nhánh 0 (ép 10 mm) chạm: KHÔNG (chỉ chạm lưng đai)
+  que nhánh 1 (ép 10 mm) chạm: KHÔNG (chỉ chạm lưng đai)
+
+Lắp ráp tổng: 202 chi tiết, đã thay: ['AX-1_3_cang_dai_J2', 'AX-2_1_cang_dai_J3']

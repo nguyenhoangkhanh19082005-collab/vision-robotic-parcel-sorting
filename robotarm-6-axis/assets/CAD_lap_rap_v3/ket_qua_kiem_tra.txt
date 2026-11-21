@@ -1,0 +1,29 @@
+Lắp ráp v2: 194 chi tiết (13 s)
+  AX-1_3_cang_dai_J2_v2 → AX-1_3_cang_dai_giua_nhanh_J2 (thể tích 102.33 cm3)
+  AX-2_1_cang_dai_J3_v2 → AX-2_1_cang_dai_J3 (thể tích 72.70 cm3)
+  AX-2_3_ranh_cang_dai_J3 → AX-2_3 (thể tích 32.33 cm3)
+  bỏ Ga_giac_hut_J6 (gá cũ)
+  bỏ Giac_hut_L60-M12_HSP-40_mo_phong (gá cũ)
+  AX-4_4 → AX-4_4_rut_ngan (bầu 32.5 → 16.5 mm); 64 chi tiết phía cổ tay lùi 16 mm về phía khuỷu: AX-4_1, AX-4_2, AX-4_3, AX-5_1, AX-5_2, AX-6, ISK_M3x10, ISK_M3x20, ISK_M4x16_DIN912_M4x16, ISK_M5x25_DIN912_M5x25, Lager_19x5x6, Lager_32x15x9, Lager_32x20x7, Mutter_M3, Mutter_M4, Mutter_M5, Nema17_Schrittmotor, Riemenscheibe_16mm, Riemenscheibe_40mm
+  AX-4_4 đầu gần (s < 150): trùng gốc 100.0 % thể tích
+  AX-4_4 đầu xa (sau bầu): trùng gốc 100.0 % thể tích
+Trục J3 → tâm cổ tay: 267.0 → 251.0 mm
+  thêm Ga_giac_hut_J6_dai (46 × 45 × 75 mm) + giác hút mô phỏng; miệng giác cách mặt bích J6 129 mm
+
+Lắp ráp v3: 194 chi tiết (49 s)
+
+Chồng lấn (> 0.5 mm3) của chi tiết mới / đổi chỗ:
+  AX-1_3_cang_dai_giua_nhanh_J2: AX-1_6 35.7 mm3
+  AX-2_1_cang_dai_J3: AX-1_6 245.0 mm3
+  AX-2_3: KHÔNG
+  AX-4_4_rut_ngan: KHÔNG
+  Ga_giac_hut_J6_dai: KHÔNG
+  Giac_hut_L60-M12_HSP-40_mo_phong: KHÔNG
+  Nhóm lùi 16 mm × nhóm giữ nguyên: không có chồng lấn mới
+
+Quét J5 (so với tư thế CAD, bước 5°), khối bao gá khi J6 quay đủ vòng + giác hút; so với 17 chi tiết khâu 4/cẳng tay:
+  gá cũ (cao 45, miệng giác 99): không chạm từ -125° tới 95° (chạm: [-150, -145, -140]…[140, 145, 150])
+  gá dài (cao 75, miệng giác 129): không chạm từ -125° tới 95° (chạm: [-150, -145, -140]…[140, 145, 150])
+
+Đã ghi E:\UDMT\robotarm-6-axis\assets\CAD_lap_rap_v3\Roboter_v3_J4_cu_bau_ngan_giac_hut_dai.step (911 s)
+Ảnh: E:\UDMT\robotarm-6-axis\assets\CAD_lap_rap_v3\anh_lap_rap_v3.png (917 s)

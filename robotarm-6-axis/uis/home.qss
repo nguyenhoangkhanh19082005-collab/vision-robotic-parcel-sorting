@@ -1,0 +1,73 @@
+/*//////////////////////////////////////////////////////////
+Title,Footer :         #F4A460
+Level 0 (Main):        #FFFFFF  (trắng thuần)
+Level 1 (Outer):       #F5F6FA
+Level 2 (Section):     #EBEDF3
+Level 3 (Inner):       #E1E4EC
+Level 4 (Card):        #D7DBE5
+Level 5 (Deep):        #CDD2DE */
+#bg_app {
+    background-color: #FFFFFF;
+}
+
+/*Tiêu đề ứng dụng : Tên nhóm nghiên cứu + tiêu đề + nút đăng nhập (hiển thi )*/
+#frm_titleapp{
+    background-color: #F4A460;
+    min-height: 40px;
+    max-height: 40px;
+}
+#lbl_teamname {
+    font-size: 14px;
+    font-weight: 400;
+}
+#lbl_nameapp{
+    font-size: 18px;
+    font-weight: 500;
+}
+#btn_username {
+    font-size: 10px;
+    font-weight: 300;
+    border: 1px solid;
+    padding: 6px 12px;
+}
+
+/* //Menu tính năng của ứng dụng : Home control , Profile(thiết lập robot,...) ,
+Program(teach robot quỹ đạo,) , View (thiết lập khung nhìn ,camera), 
+tool (Xuất báo cáo , log,..) ,help(đọc hướng dẫn sử dụng bên chrome) */
+#frm_menu{
+    background-color: #F5F6FA;
+    min-height: 30px;
+    max-height: 30px;
+}
+#frm_menu QPushButton{
+    background-color: #F5F6FA;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 6px 12px;
+    border: 0;
+}
+
+
+/*Phím tắt*/
+#frm_tool{
+    background-color: #F5F6FA;
+    min-height: 50px;
+    max-height: 50px;
+}
+
+/*Màn điều khiển chính */
+#frm_main_control{
+    background-color: #F5F6FA;
+
+}
+
+#frm_main_control QFrame {
+    background-color: #EBEDF3;
+}
+
+/* Footer (trạng thái,chế độ ,cổng kết nối...)*/
+#frm_state {
+    background-color: #F4A460;
+    min-height: 30px;
+    max-height: 30px;
+}

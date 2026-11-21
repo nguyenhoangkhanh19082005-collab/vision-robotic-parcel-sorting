@@ -1,0 +1,6 @@
+Gá dài: 46 × 45 × 75 mm (cũ 46 × 45 × 45), khoang ống 66 mm (cũ 36), thể tích 49.9 cm3 (≈ 49 g PLA/PETG), B-rep hợp lệ True
+Đầu đuôi khí cách mặt đế: 51 mm khi giác tự do, 41 mm khi nén hết lò xo (gá cũ 21 / 11 mm)
+Bán kính uốn tối đa của ống Ø10 (tâm ống) để ra cửa sổ không cấn đế: tự do 56 mm, nén hết 38 mm (gá cũ 16 / 12 mm)
+Miệng giác (chưa nén) cách mặt bích J6 129 mm (gá cũ 99); nén hết 119 mm → tool_length ≈ 129 mm
+Lắp: 4 vít M3×12 qua đế vào 4 đai ốc chìm của AX-6 (góc 60/120/240/300°, tháo 6 vít M3×10 cắm sẵn); ren M12 kẹp 2 đai ốc trên tấm trên; cắm ống vào đuôi khí rồi cho ống uốn thoải ra 1 trong 2 cửa sổ hở.
+STL hướng in: 1364 tam giác, cạnh hở 0, đa tạp True, 49.9 cm3; in nằm nghiêng (cao in 45 mm), không cần support

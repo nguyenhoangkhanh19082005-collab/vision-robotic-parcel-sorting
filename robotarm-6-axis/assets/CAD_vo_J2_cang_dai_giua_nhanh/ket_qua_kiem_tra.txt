@@ -1,0 +1,38 @@
+vỏ gốc AX-1_3: 98.83 cm3 (trùng bản cad_cache 98.83 cm3), hợp lệ True
+puly lớn ở gốc, puly nhỏ tâm [ 5.1 72.4], khoảng cách tâm 72.6 mm
+trụ vít nắp (có hốc đai ốc M3) gần nhánh đai: [(np.float64(37.5), np.float64(32.3)), (np.float64(-32.3), np.float64(37.5))]
+nhánh +1: f = 0.540 (cách điểm đai rời puly lớn 37.8 mm), vít nghiêng +8.5° so với pháp tuyến đai, khe quanh trục vít ≥ 4.6 mm (lỗ Ø4.4 → nhựa quanh lỗ ≥ 2.4 mm), lưng đai → mặt trong thành 25.2 mm, mặt ngoài 28.9 mm; rãnh trượt (ép 0–10) cách vành puly lớn 7.1 mm, puly nhỏ 14.8 mm
+nhánh -1: f = 0.540 (cách điểm đai rời puly lớn 37.8 mm), vít nghiêng -9.0° so với pháp tuyến đai, khe quanh trục vít ≥ 4.6 mm (lỗ Ø4.4 → nhựa quanh lỗ ≥ 2.4 mm), lưng đai → mặt trong thành 25.5 mm, mặt ngoài 29.2 mm; rãnh trượt (ép 0–10) cách vành puly lớn 7.2 mm, puly nhỏ 14.7 mm
+  trụ nhánh +1: mặt cuối trụ Ø11 ở 24.5 mm (mặt trong thành tại trục vít 25.2); gân vuông 7.2 mm nối vào thành tới 26.1 mm
+  khe thả đai ốc M4: cách lưng đai 12.0–15.5 mm; ăn vào vỏ gốc 0.1 mm3; phía trên khe trống 12.4 mm
+  trụ nhánh +1: Ø11 từ 9.0 → 24.5 mm (cách mặt ngoài thành ≥ 0.4 mm), chân đỡ xuống đáy (w = -20.0, đáy dày 3.3–34.5 mm), chân dài tới 17.2 mm
+  trụ nhánh -1: mặt cuối trụ Ø11 ở 24.8 mm (mặt trong thành tại trục vít 25.5); gân vuông 7.2 mm nối vào thành tới 26.3 mm
+  khe thả đai ốc M4: cách lưng đai 12.0–15.5 mm; ăn vào vỏ gốc 0.0 mm3; phía trên khe trống 12.5 mm
+  trụ nhánh -1: Ø11 từ 9.0 → 24.8 mm (cách mặt ngoài thành ≥ 0.4 mm), chân đỡ xuống đáy (w = -20.0, đáy dày 3.3–34.5 mm), chân dài tới 17.8 mm
+  gân không nhô: cạnh hở lưới 68
+  gân tin+1.4: cạnh hở lưới 0
+  → nhánh +1: gân tới 26.6 mm; đầu gân nhô khỏi mặt ngoài thành tối đa 0.2 mm (ở góc phía thành thấp)
+  → nhánh -1: gân tới 26.9 mm; đầu gân nhô khỏi mặt ngoài thành tối đa 0.2 mm (ở góc phía thành thấp)
+
+=== KIỂM TRA ===
+vỏ mới: hợp lệ True, số solid 1, thể tích 98.83 → 102.33 cm3
+phần thêm chạm chi tiết khác: KHÔNG
+che lối nhét đai ốc M3 của trụ vít nắp: KHÔNG
+  nhánh +1 rãnh trượt e=2 ép  0.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 10.9 mm
+  nhánh +1 rãnh trượt e=2 ép  5.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 8.7 mm
+  nhánh +1 rãnh trượt e=2 ép 10.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 7.1 mm
+  nhánh +1 rãnh trượt e=3 ép  0.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 10.9 mm
+  nhánh +1 rãnh trượt e=3 ép  5.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 8.7 mm
+  nhánh +1 rãnh trượt e=3 ép 10.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 7.1 mm
+  nhánh +1 thân vít (ép 0→10, thò ra ngoài 15 mm): chạm không
+  nhánh +1 vít cần: chạm lưng đai ↔ ép 10 mm = M4 dài 28 ↔ 38 mm (tính từ mặt ngoài vỏ, đầu vít nằm ngoài) → dùng M4×40
+  nhánh -1 rãnh trượt e=2 ép  0.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 10.9 mm
+  nhánh -1 rãnh trượt e=2 ép  5.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 8.7 mm
+  nhánh -1 rãnh trượt e=2 ép 10.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 7.1 mm
+  nhánh -1 rãnh trượt e=3 ép  0.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 10.9 mm
+  nhánh -1 rãnh trượt e=3 ép  5.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 8.7 mm
+  nhánh -1 rãnh trượt e=3 ép 10.0: chạm không; chạm vỏ 0.0 mm3; cách puly lớn 7.1 mm
+  nhánh -1 thân vít (ép 0→10, thò ra ngoài 15 mm): chạm không
+  nhánh -1 vít cần: chạm lưng đai ↔ ép 10 mm = M4 dài 28 ↔ 38 mm (tính từ mặt ngoài vỏ, đầu vít nằm ngoài) → dùng M4×40
+STL (lệch 0.05 mm, góc 0.3): 73172 tam giác, cạnh hở 0, đa tạp True, 102.24 cm3
+→ lưới kín: True

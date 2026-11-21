@@ -1,0 +1,523 @@
+#include <Arduino.h>
+#include <SPI.h>
+#include <Ethernet.h>
+#include <EthernetUdp.h>
+#include <TMCStepper.h>
+#include <FastAccelStepper.h>
+#include <Preferences.h>
+
+// ================= CẤU HÌNH MẠNG ETHERNET W5500 =================
+#define W5500_CS_PIN 10
+#define SPI_MOSI_PIN 11
+#define SPI_MISO_PIN 12
+#define SPI_SCK_PIN  13
+
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress ip(192, 168, 1, 177);
+unsigned int localPort = 8888;
+
+EthernetUDP Udp;
+
+// ================= CẤU HÌNH GÓI TIN NHỊ PHÂN & CRC16 =================
+#define HEADER_COMMAND  0xAA55
+#define HEADER_FEEDBACK 0x55AA
+
+#define CMD_STOP      0
+#define CMD_MOVE_PC   1
+#define CMD_REC_WP    2
+#define CMD_PLAY_AUTO 3
+#define CMD_TOOL_ONLY 4
+#define CMD_SET_ZERO  5
+
+struct __attribute__((packed)) RobotCommandPacket {
+  uint16_t header;       // 0xAA55
+  uint8_t  command_type; // 0: STOP, 1: MOVE_PC, 2: REC_WP, 3: PLAY_AUTO, 4: TOOL_ONLY, 5: SET_ZERO
+  uint8_t  tool_state;   // 0: OFF, 1: SUCK, 2: RELEASE
+  float    target_angles[6];
+  uint16_t crc16;
+};
+
+struct __attribute__((packed)) RobotFeedbackPacket {
+  uint16_t header;        // 0x55AA
+  uint8_t  robot_mode;    // 0: MODE_PC, 1: MODE_AUTO
+  uint8_t  current_tool;  // 0: OFF, 1: SUCK, 2: RELEASE
+  float    actual_angles[6];
+  uint16_t crc16;
+};
+
+uint16_t calc_crc16(const uint8_t *data, size_t len) {
+  uint16_t crc = 0xFFFF;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (int j = 0; j < 8; j++) {
+      if (crc & 0x0001) crc = (crc >> 1) ^ 0xA001;
+      else crc >>= 1;
+    }
+  }
+  return crc & 0xFFFF;
+}
+
+// ================= PIN CẤU HÌNH ĐỘNG CƠ =================
+#define ENABLE_PIN 14
+#define RX1_PIN 17
+#define TX1_PIN 18
+#define RX2_PIN 8
+#define TX2_PIN 9
+
+const uint8_t STEP_PINS[6] = {1, 4, 6, 15, 40, 38};
+const uint8_t DIR_PINS[6]  = {2, 5, 7, 16, 41, 39};
+
+// ================= PIN RELAY BƠM / VAN (ĐẦU HÚT CHÂN KHÔNG) =================
+// LƯU Ý PHẦN CỨNG: Bản gốc GitHub khai báo PIN 10, 11 bị trùng trực tiếp với
+// W5500_CS_PIN (10) và SPI_MOSI_PIN (11) của chip mạng Ethernet W5500.
+// Bạn có thể chọn 1 trong 3 phương án đấu nối sau tùy theo mạch thực tế đã hàn:
+//
+// PHƯƠNG ÁN 1 (Mặc định khuyến nghị): Dùng 2 chân IO tự do ngoài rìa header (PIN 21, 47)
+#define PUMP_PIN 21
+#define VALVE_PIN 47
+//
+// PHƯƠNG ÁN 2 (Nếu mạch đã hàn kín 100% không còn chân trống):
+// Tận dụng 2 chân UART của cụm TMC2209 J4-J6 (chân 8 và 9). TMC2209 chạy chế độ Standalone.
+// #define PUMP_PIN 8
+// #define VALVE_PIN 9
+//
+// PHƯƠNG ÁN 3 (Nếu hiện tại chỉ cần chạy cánh tay 6 trục, chưa lắp đầu hút chân không):
+// Đặt -1 để vô hiệu hóa rơ-le, bảo đảm W5500 và 6 động cơ hoạt động trơn tru 100%.
+// #define PUMP_PIN -1
+// #define VALVE_PIN -1
+
+#define RELAY_ON LOW
+#define RELAY_OFF HIGH
+
+#define TOOL_OFF 0
+#define TOOL_SUCK 1
+#define TOOL_RELEASE 2
+
+uint8_t current_tool_state = TOOL_OFF;
+
+// ================= THÔNG SỐ ĐỘNG CƠ & HỘP SỐ =================
+const float MICROSTEPS = 16.0;
+const float STEPS_PER_REV = 200.0;
+const uint16_t MOTOR_CURRENTS[6] = {1000, 650, 500, 450, 800, 800};
+// Tỉ số truyền cơ khí chuẩn (Phân số exact ratio cho Khớp 2, 3, 4 và Khớp 5 đai giảm tốc 2.5:1)
+const float GEAR_RATIOS[6] = {1.0, 5.181818, 5.181818, 5.181818, 2.5, 1.0};
+// Hệ số chiều quay thực tế động cơ (+1: Thuận, -1: Đảo chiều theo chiều đấu dây cuộn motor)
+// Đặt DIR_SIGNS[4] = 1.0 để Khớp 5 (J5) gập xuống đúng hướng khi kéo slider xuống góc âm
+const float DIR_SIGNS[6] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+float steps_per_degree[6];
+
+// Vận tốc và gia tốc tối ưu hóa riêng biệt từng khớp:
+// - J1 (Đế): Tốc độ 2500 steps/s, gia tốc 1000 steps/s²
+// - J2, J3 (Vai & Khuỷu): Khối lượng nặng, quán tính lớn -> giữ gia tốc 600 steps/s² để không trượt bước
+// - J4 (Cổ tay xoay): Tỉ số 5.18, tốc độ 2000 steps/s, gia tốc 1000 steps/s²
+// - J5 (Cổ tay gập): Tỉ số 2.5:1, tốc độ 2200 steps/s, gia tốc 1000 steps/s²
+// - J6 (Đầu xoay trục cuối): Tỉ số 1:1 (~8.89 steps/độ), tải nhẹ -> gia tốc 1800 steps/s², tốc độ 3000 steps/s để đáp ứng tức thì, triệt tiêu hoàn toàn giật cục!
+const uint32_t JOINT_MAX_ACCEL[6] = {1000, 600, 600, 1000, 1000, 1800};
+const uint32_t JOINT_MAX_SPEED[6] = {2500, 1800, 1800, 2000, 2200, 3000};
+int32_t set_velocity = 2000;
+int32_t set_accel = 600;
+
+// ================= TRẠNG THÁI & BỘ NHỚ FLASH =================
+enum RobotMode { MODE_PC, MODE_AUTO };
+enum RobotState { IDLE, RUNNING, DELAY_WAIT };
+
+RobotMode current_mode = MODE_PC;
+RobotState current_state = IDLE;
+
+Preferences preferences;
+#define MAX_WAYPOINTS 20
+
+struct Waypoint {
+  float angles[6];
+  uint8_t tool_state;
+};
+
+Waypoint sequence[MAX_WAYPOINTS];
+int num_waypoints = 0;
+int auto_index = 0;
+uint32_t wait_timer = 0;
+
+float target_angles[6] = {0, 0, 0, 0, 0, 0};
+int32_t active_target_steps[6] = {0, 0, 0, 0, 0, 0};
+uint8_t target_tool = 0;
+bool new_command = false;
+uint32_t last_feedback_time = 0;
+IPAddress remoteIP;
+uint16_t remotePort;
+
+// ================= ĐỐI TƯỢNG ĐIỀU KHIỂN =================
+FastAccelStepperEngine engine = FastAccelStepperEngine();
+FastAccelStepper *steppers[6];
+
+TMC2209Stepper driver0(&Serial1, 0.11f, 0);
+TMC2209Stepper driver1(&Serial1, 0.11f, 1);
+TMC2209Stepper driver2(&Serial1, 0.11f, 2);
+TMC2209Stepper driver3(&Serial2, 0.11f, 0);
+TMC2209Stepper driver4(&Serial2, 0.11f, 1);
+TMC2209Stepper driver5(&Serial2, 0.11f, 2);
+TMC2209Stepper* drivers[6] = {&driver0, &driver1, &driver2, &driver3, &driver4, &driver5};
+
+void MotorTask(void *pvParameters);
+void loadFromFlash();
+void saveToFlash();
+void executeTool(uint8_t state);
+
+bool ethernet_available = false;
+
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(115200, SERIAL_8N1, RX1_PIN, TX1_PIN);
+  Serial2.begin(115200, SERIAL_8N1, RX2_PIN, TX2_PIN);
+
+  // Khởi tạo Relay (nếu được kích hoạt)
+#if (PUMP_PIN >= 0) && (VALVE_PIN >= 0)
+  pinMode(PUMP_PIN, OUTPUT);
+  pinMode(VALVE_PIN, OUTPUT);
+  executeTool(TOOL_OFF);
+#endif
+
+  // Kích hoạt toàn bộ 6 driver TMC2209 cố định mức LOW (Active LOW)
+  pinMode(ENABLE_PIN, OUTPUT);
+  digitalWrite(ENABLE_PIN, LOW);
+
+  // Khởi tạo SPI & Ethernet W5500 (Kiểm tra an toàn nếu có cắm module phần cứng)
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, W5500_CS_PIN);
+  Ethernet.init(W5500_CS_PIN);
+  if (Ethernet.hardwareStatus() != EthernetNoHardware) {
+    Ethernet.begin(mac, ip);
+    Udp.begin(localPort);
+    ethernet_available = true;
+    Serial.print("W5500 Industrial Ethernet IP: ");
+    Serial.println(Ethernet.localIP());
+  } else {
+    Serial.println("Chay che do USB Serial Type-C thuan (Khong phat hien W5500 SPI).");
+  }
+
+  engine.init();
+  loadFromFlash();
+
+  for (int i = 0; i < 6; i++) {
+    steps_per_degree[i] = (STEPS_PER_REV * MICROSTEPS * GEAR_RATIOS[i] * DIR_SIGNS[i]) / 360.0;
+
+    drivers[i]->begin();
+    drivers[i]->toff(4);
+    drivers[i]->blank_time(24);
+    drivers[i]->rms_current(MOTOR_CURRENTS[i]);
+    drivers[i]->microsteps(MICROSTEPS);
+    drivers[i]->mstep_reg_select(true);
+    drivers[i]->internal_Rsense(false);
+    drivers[i]->pdn_disable(true);
+    drivers[i]->en_spreadCycle(true);
+    drivers[i]->TPWMTHRS(0);
+
+    // CẤU HÌNH CÔNG SUẤT GPIO ESP32-S3 (KHẮC PHỤC "XUẤT XUNG KHÁ NHỎ"):
+    // Nâng drive strength lên mức tối đa GPIO_DRIVE_CAP_3 (~40mA) trên cả 6 chân STEP và DIR.
+    // Giúp triệt tiêu hoàn toàn hiện tượng suy hao sụt áp xung do tụ ký sinh và tải của đèn LED WS2812 trên GPIO 38.
+    pinMode(STEP_PINS[i], OUTPUT);
+    pinMode(DIR_PINS[i], OUTPUT);
+    gpio_set_drive_capability((gpio_num_t)STEP_PINS[i], GPIO_DRIVE_CAP_3);
+    gpio_set_drive_capability((gpio_num_t)DIR_PINS[i], GPIO_DRIVE_CAP_3);
+
+    steppers[i] = engine.stepperConnectToPin(STEP_PINS[i]);
+    if (steppers[i]) {
+      // Thiết lập trễ đảo chiều dir_change_delay_us = 100 µs
+      // Đảm bảo TMC2209 chốt chiều quay chuẩn xác và bộ đệm RMT V2 trên ESP32-S3 xả sạch xung trước khi đổi chiều
+      steppers[i]->setDirectionPin(DIR_PINS[i], true, 100);
+      steppers[i]->setSpeedInHz(JOINT_MAX_SPEED[i]);
+      steppers[i]->setAcceleration(JOINT_MAX_ACCEL[i]);
+      steppers[i]->setCurrentPosition(0);
+    }
+  }
+
+  xTaskCreatePinnedToCore(MotorTask, "MotorTask", 4096, NULL, 3, NULL, 0);
+  Serial.println("System Ready. Dual Mode Serial/UDP Controller Active.");
+}
+
+void executeTool(uint8_t state) {
+  current_tool_state = state;
+#if (PUMP_PIN >= 0) && (VALVE_PIN >= 0)
+  if (state == TOOL_SUCK) {
+    digitalWrite(VALVE_PIN, RELAY_OFF);
+    delay(50);
+    digitalWrite(PUMP_PIN, RELAY_ON);
+  } else if (state == TOOL_RELEASE) {
+    digitalWrite(PUMP_PIN, RELAY_OFF);
+    delay(50);
+    digitalWrite(VALVE_PIN, RELAY_ON);
+  } else {
+    digitalWrite(PUMP_PIN, RELAY_OFF);
+    digitalWrite(VALVE_PIN, RELAY_OFF);
+  }
+#endif
+}
+
+// ================= BIẾN NHẬN DỮ LIỆU USB SERIAL STREAM =================
+uint8_t serial_rx_buf[sizeof(RobotCommandPacket)];
+size_t serial_rx_idx = 0;
+unsigned long last_serial_rx_time = 0;
+unsigned long last_serial_byte_time = 0;
+
+void processRobotCommand(const RobotCommandPacket& rx_packet) {
+  if (rx_packet.command_type == CMD_STOP) {
+    current_mode = MODE_PC;
+    for (int i = 0; i < 6; i++) {
+      if (steppers[i]) {
+        steppers[i]->forceStopAndNewPosition(steppers[i]->getCurrentPosition());
+        active_target_steps[i] = steppers[i]->getCurrentPosition();
+      }
+    }
+    executeTool(TOOL_OFF);
+    current_state = IDLE;
+    if (rx_packet.tool_state == 255) { // Clear all waypoints
+      num_waypoints = 0;
+      saveToFlash();
+    }
+  } 
+  else if (rx_packet.command_type == CMD_PLAY_AUTO) {
+    if (num_waypoints > 0) {
+      current_mode = MODE_AUTO;
+      auto_index = 0;
+      current_state = IDLE;
+    }
+  }
+  else if (rx_packet.command_type == CMD_TOOL_ONLY) {
+    executeTool(rx_packet.tool_state);
+  }
+  else if (rx_packet.command_type == CMD_REC_WP) {
+    if (num_waypoints < MAX_WAYPOINTS) {
+      for (int i = 0; i < 6; i++) sequence[num_waypoints].angles[i] = rx_packet.target_angles[i];
+      sequence[num_waypoints].tool_state = rx_packet.tool_state;
+      num_waypoints++;
+      saveToFlash();
+    }
+  }
+  else if (rx_packet.command_type == CMD_MOVE_PC && current_mode == MODE_PC) {
+    for (int i = 0; i < 6; i++) target_angles[i] = rx_packet.target_angles[i];
+    target_tool = rx_packet.tool_state;
+    new_command = true;
+  }
+  else if (rx_packet.command_type == CMD_SET_ZERO) {
+    current_mode = MODE_PC;
+    for (int i = 0; i < 6; i++) {
+      if (steppers[i]) {
+        steppers[i]->forceStopAndNewPosition(0);
+        steppers[i]->setCurrentPosition(0);
+      }
+      active_target_steps[i] = 0;
+      target_angles[i] = 0.0f;
+    }
+    new_command = false;
+    current_state = IDLE;
+    last_feedback_time = 0; // Kích hoạt gửi phản hồi Act: 0.0° ngay lập tức cho GUI
+    Serial.println(">> ZERO CALIBRATION OK: Tat ca 6 truc da duoc reset ve goc 0.0 do!");
+  }
+}
+
+RobotFeedbackPacket buildFeedbackPacket() {
+  RobotFeedbackPacket packet;
+  packet.header = HEADER_FEEDBACK;
+  packet.robot_mode = (uint8_t)current_mode;
+  packet.current_tool = current_tool_state;
+
+  for (int i = 0; i < 6; i++) {
+    if (steppers[i] && fabs(steps_per_degree[i]) > 0.0001f) {
+      packet.actual_angles[i] = (float)(steppers[i]->getCurrentPosition()) / steps_per_degree[i];
+    } else {
+      packet.actual_angles[i] = 0.0f;
+    }
+  }
+
+  packet.crc16 = calc_crc16((uint8_t*)&packet, sizeof(RobotFeedbackPacket) - 2);
+  return packet;
+}
+
+void loop() {
+  // --- 1. ĐỌC VÀ GIẢI MÃ DỮ LIỆU TỪ USB SERIAL (TYPE-C) ---
+  while (Serial.available() > 0) {
+    uint8_t b = Serial.read();
+    unsigned long now = millis();
+
+    // Reset buffer nếu ngắt quãng quá 100ms
+    if (serial_rx_idx > 0 && (now - last_serial_byte_time > 100)) {
+      serial_rx_idx = 0;
+    }
+    last_serial_byte_time = now;
+
+    if (serial_rx_idx == 0) {
+      if (b == 0x55) { // HEADER_COMMAND (0xAA55) byte đầu tiên trong Little Endian là 0x55
+        serial_rx_buf[serial_rx_idx++] = b;
+      }
+    } else if (serial_rx_idx == 1) {
+      if (b == 0xAA) { // Byte thứ hai là 0xAA
+        serial_rx_buf[serial_rx_idx++] = b;
+      } else {
+        serial_rx_idx = (b == 0x55) ? 1 : 0;
+      }
+    } else {
+      serial_rx_buf[serial_rx_idx++] = b;
+      if (serial_rx_idx >= sizeof(RobotCommandPacket)) {
+        RobotCommandPacket* cmd = (RobotCommandPacket*)serial_rx_buf;
+        uint16_t calculated_crc = calc_crc16(serial_rx_buf, sizeof(RobotCommandPacket) - 2);
+        if (cmd->crc16 == calculated_crc) {
+          processRobotCommand(*cmd);
+          last_serial_rx_time = millis();
+          serial_rx_idx = 0;
+        } else {
+          // Trượt tìm header 0x55, 0xAA tiếp theo trong buffer nếu CRC sai lệch nhịp
+          size_t next_head = 0;
+          for (size_t k = 1; k < sizeof(RobotCommandPacket) - 1; k++) {
+            if (serial_rx_buf[k] == 0x55 && serial_rx_buf[k+1] == 0xAA) {
+              next_head = k;
+              break;
+            }
+          }
+          if (next_head > 0) {
+            size_t remaining = sizeof(RobotCommandPacket) - next_head;
+            memmove(serial_rx_buf, &serial_rx_buf[next_head], remaining);
+            serial_rx_idx = remaining;
+          } else {
+            serial_rx_idx = 0;
+          }
+        }
+      }
+    }
+  }
+
+  // --- 2. ĐỌC VÀ GIẢI MÃ GÓI TIN UDP NHỊ PHÂN TỪ MẠNG LAN W5500 ---
+  if (ethernet_available) {
+    int packetSize = Udp.parsePacket();
+    if (packetSize == sizeof(RobotCommandPacket)) {
+      RobotCommandPacket rx_packet;
+      Udp.read((char*)&rx_packet, sizeof(RobotCommandPacket));
+
+      uint16_t calculated_crc = calc_crc16((uint8_t*)&rx_packet, sizeof(RobotCommandPacket) - 2);
+      if (rx_packet.header == HEADER_COMMAND && calculated_crc == rx_packet.crc16) {
+        remoteIP = Udp.remoteIP();
+        remotePort = Udp.remotePort();
+        processRobotCommand(rx_packet);
+      }
+    }
+  }
+
+  // --- 3. GỬI PHẢN HỒI ĐỊNH KỲ (MỖI 33ms ~ 30Hz) CHO CẢ 2 KÊNH ---
+  if (millis() - last_feedback_time > 33) {
+    RobotFeedbackPacket packet = buildFeedbackPacket();
+
+    // Luôn phát phản hồi qua USB Serial để GUI Python bắt nhịp hiển thị Act tức thì
+    Serial.write((uint8_t*)&packet, sizeof(RobotFeedbackPacket));
+
+    // Phản hồi qua UDP nếu máy tính gửi qua Mạng LAN W5500
+    if (ethernet_available && remotePort > 0) {
+      Udp.beginPacket(remoteIP, remotePort);
+      Udp.write((uint8_t*)&packet, sizeof(RobotFeedbackPacket));
+      Udp.endPacket();
+    }
+
+    last_feedback_time = millis();
+  }
+  delay(1);
+}
+
+// ================= HÀM NỘI SUY ĐỒNG BỘ BƯỚC =================
+void moveSynchronized(float target_ang[6]) {
+  int32_t target_steps[6];
+  int32_t delta_steps[6];
+  int32_t max_delta = 0;
+
+  for (int i = 0; i < 6; i++) {
+    if (!steppers[i]) continue;
+    target_steps[i] = (int32_t)round(target_ang[i] * steps_per_degree[i]);
+    delta_steps[i] = abs(target_steps[i] - steppers[i]->getCurrentPosition());
+    
+    // Dải chết thích ứng (Adaptive Deadband):
+    // Trục tỉ số truyền nhỏ 1:1 (J6, J1) chỉ có ~8.89 bước/độ -> deadband = 1 bước để không bị trơ/khựng
+    // Trục tỉ số truyền lớn (J2, J3, J4, J5) -> deadband = 2 bước
+    uint32_t deadband = (GEAR_RATIOS[i] <= 1.5f) ? 1 : 2;
+    if (delta_steps[i] <= deadband) {
+      delta_steps[i] = 0;
+    }
+    if (delta_steps[i] > max_delta) max_delta = delta_steps[i];
+  }
+
+  if (max_delta == 0) return;
+
+  for (int i = 0; i < 6; i++) {
+    if (!steppers[i]) continue;
+    if (delta_steps[i] > 0) {
+      // Chỉ lập lại lệnh moveTo khi đích đến thực sự thay đổi hoặc động cơ đang dừng
+      if (target_steps[i] != active_target_steps[i] || !steppers[i]->isRunning()) {
+        active_target_steps[i] = target_steps[i];
+
+        float ratio = (float)delta_steps[i] / max_delta;
+        int32_t sync_speed = (int32_t)(JOINT_MAX_SPEED[i] * ratio);
+
+        // Đảm bảo tốc độ tối thiểu ít nhất 150 bước/giây để trục không bị bò rùa
+        if (sync_speed < 150) sync_speed = 150;
+
+        steppers[i]->setSpeedInHz(sync_speed);
+        // Duy trì gia tốc chuẩn riêng của từng khớp để thắng dứt khoát không bị vọt lố/xoay vô hạn
+        steppers[i]->setAcceleration(JOINT_MAX_ACCEL[i]);
+        steppers[i]->moveTo(target_steps[i]);
+      }
+    }
+  }
+}
+
+// ================= FREERTOS MOTOR TASK =================
+void MotorTask(void *pvParameters) {
+  while (true) {
+    if (current_mode == MODE_PC) {
+      if (new_command) {
+        new_command = false;
+        executeTool(target_tool);
+        moveSynchronized(target_angles);
+      }
+    } 
+    else if (current_mode == MODE_AUTO) {
+      if (current_state == IDLE) {
+        moveSynchronized(sequence[auto_index].angles);
+        current_state = RUNNING;
+      }
+      else if (current_state == RUNNING) {
+        bool all_stopped = true;
+        for (int i = 0; i < 6; i++) {
+          if (steppers[i] && steppers[i]->isRunning()) all_stopped = false;
+        }
+        if (all_stopped) {
+          executeTool(sequence[auto_index].tool_state);
+          wait_timer = millis();
+          current_state = DELAY_WAIT;
+        }
+      }
+      else if (current_state == DELAY_WAIT) {
+        if (millis() - wait_timer > 1000) {
+          auto_index++;
+          if (auto_index >= num_waypoints) auto_index = 0;
+          current_state = IDLE;
+        }
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+
+void saveToFlash() {
+  preferences.begin("robot_arm", false);
+  preferences.putInt("num_wp", num_waypoints);
+  if (num_waypoints > 0) {
+    preferences.putBytes("sequence", &sequence, sizeof(Waypoint) * num_waypoints);
+  }
+  preferences.end();
+}
+
+void loadFromFlash() {
+  preferences.begin("robot_arm", true);
+  num_waypoints = preferences.getInt("num_wp", 0);
+  if (num_waypoints > 0 && num_waypoints <= MAX_WAYPOINTS) {
+    preferences.getBytes("sequence", &sequence, sizeof(Waypoint) * num_waypoints);
+    Serial.printf("Loaded %d waypoints from Flash.\n", num_waypoints);
+  } else {
+    num_waypoints = 0;
+  }
+  preferences.end();
+}

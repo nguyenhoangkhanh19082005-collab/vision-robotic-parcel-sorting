@@ -1,0 +1,71 @@
+== Dựng hình ==
+AX-3_1: bỏ lát ống s 75.0..84.5 (9.5 mm), KHÔNG xoay nửa xa
+AX-3_1: hốc vuông 43.2 mm cho thân động cơ, bỏ 29 mm3 ở 4 góc; số khối 1, BRepCheck True
+AX-3_3: thêm 4 lỗ Ø3.4 tại (±15.5, ±15.5) + hạ bậc Ø6.0 sâu 3.2 ở mặt s = 100; lỗ giữa Ø22 giữ nguyên (khớp gờ định tâm Ø22 của động cơ); bỏ 609 mm3 (dự tính 4 lỗ ≈ 609)
+AX-4_6: lỗ trục Ø8 → Ø5.1; kéo dài lỗ vít hãm M3 (tại s = 110.0, trục vít lệch tâm 0.00 mm) vào tới lỗ trục; thể tích 4.40 → 4.81 cm3
+Động cơ 17PM-K4xx: mặt lắp tại s = 74.5, đuôi tại s = 26.5 (bản rút ngắn); đầu nối quay về +Y3 (khe hở tới vỏ: +Y3 0.84 mm, −Y3 0.84 mm)
+Gá giác hút: bỏ 6 vít M3×10 cắm sẵn trên mặt bích, thêm 4 vít M3×12; miệng giác cách mặt bích 99 mm
+  AX-3_1_rut_ngan_khong_xoay.stl: 48668 tam giác, cạnh hở 0, đa tạp True, thể tích 61.1 cm3
+  AX-3_3_17PM.stl: 23466 tam giác, cạnh hở 0, đa tạp True, thể tích 11.7 cm3
+  AX-4_6_truc_5mm.stl: 18104 tam giác, cạnh hở 0, đa tạp True, thể tích 4.8 cm3
+Đã ghi E:\UDMT\robotarm-6-axis\assets\CAD_dong_co_J4_17PM (202 chi tiết trong file lắp ráp)
+
+== Kiểm tra hình học (bản rút ngắn + động cơ 17PM-K4xx) ==
+  Chồng lấn (mm3) / khe hở nhỏ nhất (mm) của động cơ mới với chi tiết xung quanh:
+    AX-3_2#16                   : giao    0.0 (động cơ cũ, bản gốc:   65.0)   khe  1.00
+    AX-3_1#15                   : giao    0.0 (động cơ cũ, bản gốc:    0.0)   khe  0.84
+    AX-3_3#17                   : giao    0.0 (động cơ cũ, bản gốc:    0.0)   khe  0.00
+    AX-4_6#26                   : giao    0.0 (động cơ cũ, bản gốc:    0.0)   khe  0.05
+    Lager_65x50x7#120           : giao    0.0 (động cơ cũ, bản gốc:    0.0)   khe  2.00
+    AX-2_2_sua#11               : giao    0.0 (động cơ cũ, bản gốc:    0.0)   khe  2.70
+    ISK_M3x10#32                : giao   29.5 (động cơ cũ, bản gốc:   26.9)   khe  0.00
+    Mutter_M3#134               : giao    0.0 (động cơ cũ, bản gốc:    0.0)   khe  2.30
+  Chi tiết in mới với chi tiết xung quanh (giao mm3, chỉ in dòng > 0,5):
+  Khe hở đầu vít động cơ ↔ khớp nối AX-4_6: 8.94 mm
+  Trục động cơ nằm trong khớp nối: s 89.5..98.5 = 9.0 mm (hộp số cũ: 8,0 mm); khe hở bán kính 0.05 mm
+  Gá + giác hút chồng lấn với chi tiết khác (tư thế CAD): KHÔNG
+  → Số chỗ chồng lấn mới: 0
+
+== Mô-men trọng lực xấu nhất (tay duỗi ngang) — có gá + giác hút ở J6, tải đặt tại miệng giác hút ==
+  Giả định: động cơ J4 cũ 500 g, 17PM-K4xx 350 g; giác hút + đai ốc + ống 80 g; PLA 1,24 g/cm3 × hệ số đặc; các giả định khác như research/cad_kiem_tra_mo_men.py
+  Nhựa đặc 60 %, tải 0 g:
+    dài gốc + động cơ J4 cũ: J2  6.31 N·m ( +0.0 %)   J3  2.96 N·m ( +0.0 %)   sau J3 1.74 kg, trọng tâm cách J3 173 mm
+    rút ngắn + động cơ J4 cũ: J2  5.88 N·m ( -6.9 %)   J3  2.55 N·m (-14.0 %)   sau J3 1.73 kg, trọng tâm cách J3 150 mm
+    rút ngắn + 17PM-K4xx  : J2  5.61 N·m (-11.1 %)   J3  2.50 N·m (-15.6 %)   sau J3 1.58 kg, trọng tâm cách J3 161 mm
+  Nhựa đặc 60 %, tải 200 g:
+    dài gốc + động cơ J4 cũ: J2  7.40 N·m ( +0.0 %)   J3  3.75 N·m ( +0.0 %)   sau J3 1.94 kg, trọng tâm cách J3 197 mm
+    rút ngắn + động cơ J4 cũ: J2  6.90 N·m ( -6.7 %)   J3  3.27 N·m (-12.7 %)   sau J3 1.93 kg, trọng tâm cách J3 173 mm
+    rút ngắn + 17PM-K4xx  : J2  6.64 N·m (-10.3 %)   J3  3.22 N·m (-14.0 %)   sau J3 1.78 kg, trọng tâm cách J3 184 mm
+  Nhựa đặc 60 %, tải 500 g:
+    dài gốc + động cơ J4 cũ: J2  9.03 N·m ( +0.0 %)   J3  4.92 N·m ( +0.0 %)   sau J3 2.24 kg, trọng tâm cách J3 224 mm
+    rút ngắn + động cơ J4 cũ: J2  8.45 N·m ( -6.5 %)   J3  4.36 N·m (-11.5 %)   sau J3 2.23 kg, trọng tâm cách J3 199 mm
+    rút ngắn + 17PM-K4xx  : J2  8.18 N·m ( -9.5 %)   J3  4.31 N·m (-12.5 %)   sau J3 2.08 kg, trọng tâm cách J3 211 mm
+  Nhựa đặc 100 %, tải 0 g:
+    dài gốc + động cơ J4 cũ: J2  7.04 N·m ( +0.0 %)   J3  3.28 N·m ( +0.0 %)   sau J3 1.95 kg, trọng tâm cách J3 172 mm
+    rút ngắn + động cơ J4 cũ: J2  6.55 N·m ( -7.0 %)   J3  2.82 N·m (-14.1 %)   sau J3 1.93 kg, trọng tâm cách J3 149 mm
+    rút ngắn + 17PM-K4xx  : J2  6.28 N·m (-10.8 %)   J3  2.77 N·m (-15.5 %)   sau J3 1.78 kg, trọng tâm cách J3 158 mm
+  Nhựa đặc 100 %, tải 200 g:
+    dài gốc + động cơ J4 cũ: J2  8.13 N·m ( +0.0 %)   J3  4.06 N·m ( +0.0 %)   sau J3 2.15 kg, trọng tâm cách J3 193 mm
+    rút ngắn + động cơ J4 cũ: J2  7.58 N·m ( -6.8 %)   J3  3.54 N·m (-12.9 %)   sau J3 2.13 kg, trọng tâm cách J3 170 mm
+    rút ngắn + 17PM-K4xx  : J2  7.31 N·m (-10.1 %)   J3  3.49 N·m (-14.0 %)   sau J3 1.98 kg, trọng tâm cách J3 180 mm
+  Nhựa đặc 100 %, tải 500 g:
+    dài gốc + động cơ J4 cũ: J2  9.77 N·m ( +0.0 %)   J3  5.24 N·m ( +0.0 %)   sau J3 2.45 kg, trọng tâm cách J3 218 mm
+    rút ngắn + động cơ J4 cũ: J2  9.12 N·m ( -6.6 %)   J3  4.63 N·m (-11.7 %)   sau J3 2.43 kg, trọng tâm cách J3 194 mm
+    rút ngắn + 17PM-K4xx  : J2  8.85 N·m ( -9.4 %)   J3  4.58 N·m (-12.6 %)   sau J3 2.28 kg, trọng tâm cách J3 205 mm
+  Mô-men động cơ J2/J3 có được tại khớp (42STH38 0,36 N·m ở ≥ 1,68 A, hộp số 27 η 0,80, đai η 0,95; khi chạy ≈ 70 % mô-men giữ):
+    [đai theo CAD (4,0 / 3,0)] nhựa 60 %, tải 200 g: J2 có 20.7 / cần 6.64 → hệ số 3.1 (bản gốc 2.8);  J3 có 15.5 / cần 3.22 → hệ số 4.8 (bản gốc 4.1)
+    [đai theo CAD (4,0 / 3,0)] nhựa 100 %, tải 500 g: J2 có 20.7 / cần 8.85 → hệ số 2.3 (bản gốc 2.1);  J3 có 15.5 / cần 4.58 → hệ số 3.4 (bản gốc 3.0)
+    [đai 16T/55T, 16T/40T (3,44 / 2,5)] nhựa 60 %, tải 200 g: J2 có 17.8 / cần 6.64 → hệ số 2.7 (bản gốc 2.4);  J3 có 12.9 / cần 3.22 → hệ số 4.0 (bản gốc 3.5)
+    [đai 16T/55T, 16T/40T (3,44 / 2,5)] nhựa 100 %, tải 500 g: J2 có 17.8 / cần 8.85 → hệ số 2.0 (bản gốc 1.8);  J3 có 12.9 / cần 4.58 → hệ số 2.8 (bản gốc 2.5)
+
+== Khớp J4 khi bỏ hộp số 5,18:1 (động cơ nối thẳng vào khớp nối) ==
+  tải 0 g: J5 gập 0° → cần 0.07 N·m (quán tính tải 4.6 kg·cm2); J5 gập 45° → cần 0.13 N·m (quán tính tải 13.4 kg·cm2); J5 gập 90° → cần 0.14 N·m (quán tính tải 15.6 kg·cm2)
+      J5 gập 90°, dụng cụ nằm ngang: hộp số cũ giữ 1.17 / chạy 0.82 N·m → hệ số 5.9;  17PM-K4xx trực tiếp giữ 0.50 / chạy 0.39 N·m → hệ số 2.8
+      độ lệch góc rotor dưới tải này ≈ 0.32° → miệng giác hút lệch ≈ 0.7 mm (tay đòn 132 mm)
+  tải 200 g: J5 gập 0° → cần 0.13 N·m (quán tính tải 7.3 kg·cm2); J5 gập 45° → cần 0.35 N·m (quán tính tải 42.0 kg·cm2); J5 gập 90° → cần 0.39 N·m (quán tính tải 50.7 kg·cm2)
+      J5 gập 90°, dụng cụ nằm ngang: hộp số cũ giữ 1.17 / chạy 0.82 N·m → hệ số 2.1;  17PM-K4xx trực tiếp giữ 0.50 / chạy 0.39 N·m → hệ số 1.0
+      độ lệch góc rotor dưới tải này ≈ 1.02° → miệng giác hút lệch ≈ 2.3 mm (tay đòn 132 mm)
+  tải 500 g: J5 gập 0° → cần 0.22 N·m (quán tính tải 11.3 kg·cm2); J5 gập 45° → cần 0.70 N·m (quán tính tải 85.0 kg·cm2); J5 gập 90° → cần 0.77 N·m (quán tính tải 103.4 kg·cm2)
+      J5 gập 90°, dụng cụ nằm ngang: hộp số cũ giữ 1.17 / chạy 0.82 N·m → hệ số 1.1;  17PM-K4xx trực tiếp giữ 0.50 / chạy 0.39 N·m → hệ số 0.5
+  Độ phân giải J4: 16 vi bước → 0.1125°/vi bước (hộp số cũ 0.0217°). Quán tính rotor 75 g·cm2 = 0,075 kg·cm2.
+  Firmware khi lắp động cơ mới: GEAR_RATIOS[3] 5.181818 → 1.0 (hoặc lệnh $K 4 1.0), MOTOR_CURRENTS[3] 400 → 900 mA (K442B 0,9 A) hoặc tới 1500 mA (K448B 1,5 A); đổi dấu $D 4 nếu quay ngược.

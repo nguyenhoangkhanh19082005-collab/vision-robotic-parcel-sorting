@@ -1,0 +1,35 @@
+Trục khớp đọc từ STEP: J2–J3 cách nhau 154 mm; J3 → tâm mặt bích 299 mm; tải đặt cách trục J3 338 mm
+
+Nhựa in đặc 60 %, tải 200 g: khối lượng cánh tay trên 0.87 kg; sau J3 1.73 kg; sau J4 1.10 kg; sau J5 0.51 kg
+  Mô-men trọng lực xấu nhất (tay duỗi ngang): J2 6.49 N·m, J3 3.16 N·m, J4 0.08 N·m, J5 0.16 N·m
+  Mỗi 100 g tải thêm ở đầu hút: J2 +0.48, J3 +0.33, J4 +0.01, J5 +0.07 N·m
+  [đai theo CAD (J2 4.0, J3 3.0)]
+    J2: cần 6.49 | có khi chạy ≈ 18.3 (hệ số an toàn 2.8) | có khi giữ 70 % ≈ 18.3 (an toàn 2.8)
+    J3: cần 3.16 | có khi chạy ≈ 13.8 (hệ số an toàn 4.4) | có khi giữ 70 % ≈ 13.8 (an toàn 4.4)
+    J4: cần 0.08 | có khi chạy ≈ 0.8 (hệ số an toàn 10.5) | có khi giữ 70 % ≈ 0.8 (an toàn 10.5)
+  [đai nếu 16T/40T/55T (J2 3.44, J3 2.5)]
+    J2: cần 6.49 | có khi chạy ≈ 15.8 (hệ số an toàn 2.4) | có khi giữ 70 % ≈ 15.8 (an toàn 2.4)
+    J3: cần 3.16 | có khi chạy ≈ 11.5 (hệ số an toàn 3.6) | có khi giữ 70 % ≈ 11.5 (an toàn 3.6)
+    J4: cần 0.08 | có khi chạy ≈ 0.8 (hệ số an toàn 10.5) | có khi giữ 70 % ≈ 0.8 (an toàn 10.5)
+    J5 nếu cuộn 0.9 A/5.6 Ω (900 mA = 100 %): cần 0.16 | chạy ≈ 0.82 (an toàn 5.2) | giữ 80 % ≈ 0.94 (an toàn 6.0)
+    J5 nếu cuộn 1.5 A/2.4 Ω (900 mA = 59 %): cần 0.16 | chạy ≈ 0.49 (an toàn 3.1) | giữ 80 % ≈ 0.56 (an toàn 3.6)
+
+Nhựa in đặc 100 %, tải 200 g: khối lượng cánh tay trên 1.02 kg; sau J3 1.94 kg; sau J4 1.22 kg; sau J5 0.55 kg
+  Mô-men trọng lực xấu nhất (tay duỗi ngang): J2 7.22 N·m, J3 3.48 N·m, J4 0.08 N·m, J5 0.16 N·m
+  Mỗi 100 g tải thêm ở đầu hút: J2 +0.48, J3 +0.33, J4 +0.01, J5 +0.07 N·m
+  [đai theo CAD (J2 4.0, J3 3.0)]
+    J2: cần 7.22 | có khi chạy ≈ 18.3 (hệ số an toàn 2.5) | có khi giữ 70 % ≈ 18.3 (an toàn 2.5)
+    J3: cần 3.48 | có khi chạy ≈ 13.8 (hệ số an toàn 4.0) | có khi giữ 70 % ≈ 13.8 (an toàn 4.0)
+    J4: cần 0.08 | có khi chạy ≈ 0.8 (hệ số an toàn 9.9) | có khi giữ 70 % ≈ 0.8 (an toàn 9.9)
+  [đai nếu 16T/40T/55T (J2 3.44, J3 2.5)]
+    J2: cần 7.22 | có khi chạy ≈ 15.8 (hệ số an toàn 2.2) | có khi giữ 70 % ≈ 15.8 (an toàn 2.2)
+    J3: cần 3.48 | có khi chạy ≈ 11.5 (hệ số an toàn 3.3) | có khi giữ 70 % ≈ 11.5 (an toàn 3.3)
+    J4: cần 0.08 | có khi chạy ≈ 0.8 (hệ số an toàn 9.9) | có khi giữ 70 % ≈ 0.8 (an toàn 9.9)
+    J5 nếu cuộn 0.9 A/5.6 Ω (900 mA = 100 %): cần 0.16 | chạy ≈ 0.82 (an toàn 5.1) | giữ 80 % ≈ 0.94 (an toàn 5.8)
+    J5 nếu cuộn 1.5 A/2.4 Ω (900 mA = 59 %): cần 0.16 | chạy ≈ 0.49 (an toàn 3.1) | giữ 80 % ≈ 0.56 (an toàn 3.5)
+
+Tải cơ khí (nhựa 60 %, tải 200 g, đai theo CAD):
+  Mô-men trục ra hộp số 1:27 khi động cơ kéo hết sức ở 1.49 A: 6.9 N·m (động cơ) — cần kiểm tra mô-men cho phép của hộp số 36 mm
+  Mô-men trục ra hộp số chỉ để GIỮ trọng lực: J2 1.62 N·m, J3 1.05 N·m
+  Lực căng đai J2 do trọng lực (puly lớn Ø51 mm): 254 N
+  Lực căng đai J3 do trọng lực (puly lớn Ø38 mm): 166 N

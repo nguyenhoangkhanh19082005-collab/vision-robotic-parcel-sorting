@@ -1,0 +1,199 @@
+<?xml version="1.0" ?>
+<robot name="Vinhne" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:include filename="$(find Vinhne_description)/urdf/materials.xacro" />
+<xacro:include filename="$(find Vinhne_description)/urdf/Vinhne.trans" />
+<xacro:include filename="$(find Vinhne_description)/urdf/Vinhne.gazebo" />
+<link name="base_link">
+  <inertial>
+    <origin xyz="-0.15983638093330763 0.11154126613408152 -0.09097900911595318" rpy="0 0 0"/>
+    <mass value="2.3349786080629826"/>
+    <inertia ixx="0.006272" iyy="0.003974" izz="0.007755" ixy="0.00015" iyz="-0.000637" ixz="-0.000245"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="link_1_1">
+  <inertial>
+    <origin xyz="0.06886272710971661 -0.0021217482338357074 0.07679584697020791" rpy="0 0 0"/>
+    <mass value="4.1222029688427195"/>
+    <inertia ixx="0.013468" iyy="0.014429" izz="0.009502" ixy="0.000834" iyz="0.000501" ixz="-7.4e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.225639 -0.14811 0.082132" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_1_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.225639 -0.14811 0.082132" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_1_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="link_2_1">
+  <inertial>
+    <origin xyz="0.1983664231864077 -0.023093829465218263 0.25376719795138736" rpy="0 0 0"/>
+    <mass value="3.3287551134519715"/>
+    <inertia ixx="0.013256" iyy="0.014473" izz="0.006132" ixy="0.000915" iyz="0.000375" ixz="-0.001205"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.341842 -0.157622 0.116891" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.341842 -0.157622 0.116891" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="link_3_1">
+  <inertial>
+    <origin xyz="0.3265441552913553 -0.050692323413143156 0.3219797075337181" rpy="0 0 0"/>
+    <mass value="2.1488793750113477"/>
+    <inertia ixx="0.00417" iyy="0.003216" izz="0.005124" ixy="-0.001555" iyz="0.000625" ixz="0.000462"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.484994 -0.140326 0.087227" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.484994 -0.140326 0.087227" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="link_4_1">
+  <inertial>
+    <origin xyz="-0.022739130929638002 -0.05393326720875931 0.012047092815558103" rpy="0 0 0"/>
+    <mass value="1.9160755343591331"/>
+    <inertia ixx="0.00426" iyy="0.002686" izz="0.005449" ixy="-0.00081" iyz="0.000503" ixz="0.000586"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.198789 -0.02446 -0.252988" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.198789 -0.02446 -0.252988" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="link_5_1">
+  <inertial>
+    <origin xyz="0.2692892723040389 0.021755674373597808 0.42417637553513676" rpy="0 0 0"/>
+    <mass value="1.0425128459583126"/>
+    <inertia ixx="0.000528" iyy="0.000711" izz="0.000754" ixy="0.000195" iyz="-5.3e-05" ixz="8.7e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.524173 0.106516 0.143093" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_5_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.524173 0.106516 0.143093" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_5_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="link_6_1">
+  <inertial>
+    <origin xyz="0.26285270426694696 -0.010980367129758625 0.48565772636656607" rpy="0 0 0"/>
+    <mass value="0.19344804775804875"/>
+    <inertia ixx="4.8e-05" iyy="5.8e-05" izz="3.6e-05" ixy="1.1e-05" iyz="1e-06" ixz="-1e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.539657 0.098785 0.20421" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_6_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.539657 0.098785 0.20421" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://Vinhne_description/meshes/link_6_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="Revolute 8" type="continuous">
+  <origin xyz="-0.225639 0.14811 -0.082132" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="link_1_1"/>
+  <axis xyz="-0.000797 -0.083636 0.996496"/>
+</joint>
+
+<joint name="Revolute 9" type="revolute">
+  <origin xyz="-0.116203 0.009512 -0.034759" rpy="0 0 0"/>
+  <parent link="link_1_1"/>
+  <child link="link_2_1"/>
+  <axis xyz="0.872438 -0.48707 -0.040182"/>
+  <limit upper="1.570796" lower="-0.785398" effort="100" velocity="100"/>
+</joint>
+
+<joint name="Revolute 10" type="revolute">
+  <origin xyz="-0.143152 -0.017296 0.029664" rpy="0 0 0"/>
+  <parent link="link_2_1"/>
+  <child link="link_3_1"/>
+  <axis xyz="0.872438 -0.48707 -0.040182"/>
+  <limit upper="0.0" lower="-3.141593" effort="100" velocity="100"/>
+</joint>
+
+<joint name="Revolute 11" type="continuous">
+  <origin xyz="0.286205 -0.115866 0.340215" rpy="0 0 0"/>
+  <parent link="link_3_1"/>
+  <child link="link_4_1"/>
+  <axis xyz="0.466352 0.854273 -0.229639"/>
+</joint>
+
+<joint name="Revolute 12" type="revolute">
+  <origin xyz="-0.325384 -0.130976 -0.396081" rpy="0 0 0"/>
+  <parent link="link_4_1"/>
+  <child link="link_5_1"/>
+  <axis xyz="-0.81577 0.515717 0.26183"/>
+  <limit upper="1.570796" lower="-1.570796" effort="100" velocity="100"/>
+</joint>
+
+<joint name="Revolute 13" type="continuous">
+  <origin xyz="-0.015484 0.007731 -0.061117" rpy="0 0 0"/>
+  <parent link="link_5_1"/>
+  <child link="link_6_1"/>
+  <axis xyz="-0.540858 -0.840599 -0.029428"/>
+</joint>
+
+</robot>

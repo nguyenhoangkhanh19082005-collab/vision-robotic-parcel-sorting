@@ -1,0 +1,5 @@
+J2: Riemenscheibe_55mm khoan 4 lỗ Ø2.5 sâu 8.0 trên vòng Ø16 (bớt 157 mm3)
+J2: mặt bích va chạm: KHÔNG
+J3: Riemenscheibe_40mm khoan 4 lỗ Ø2.5 sâu 8.0 trên vòng Ø16 (bớt 157 mm3)
+J3: AX-2_3 chạm mặt bích 147 mm3 → ĐÃ KHOÉT (bớt 302 mm3); còn chạm sau khoét: 0.0 mm3
+J3: mặt bích va chạm: KHÔNG

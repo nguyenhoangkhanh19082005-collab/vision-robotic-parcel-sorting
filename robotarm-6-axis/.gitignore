@@ -1,0 +1,59 @@
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# --- 21/11/2026: chuẩn bị đưa lên GitHub ---
+# File tạm, cache CAD (tự sinh lại được), cấu hình công cụ AI
+.tmp/
+.claude/
+research/cad_cache/
+research/cad_cache_moi/
+.pytest_cache/
+# File lắp ráp STEP 70–76 MB: GitHub cảnh báo khi file > 50 MB và chặn khi > 100 MB.
+# Chỉ đưa bản nén của lắp ráp cuối: assets/CAD_lap_rap_v3/Roboter_v3_J4_cu_bau_ngan_giac_hut_dai.step.zip
+assets/**/Roboter*.step
+# Bản sao lưu tạm
+*.bak

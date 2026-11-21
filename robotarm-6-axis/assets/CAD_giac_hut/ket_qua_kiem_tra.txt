@@ -1,0 +1,7 @@
+Mặt bích AX-6: Ø55, 6 đai ốc M3 chìm ở các góc [0, 60, 120, 180, 240, 300]° (hệ gá), bán kính 20.77 mm
+Gá: 46 × 45 × 45 mm, thể tích 34.6 cm3 (≈ 34 g PLA/PETG với 4 vách + 25 % infill)
+Khoang ống khí: rộng 36 × cao 36 mm, hở 2 phía theo phương Y; đầu đuôi khí cách mặt đế 21 mm
+Miệng giác hút (chưa nén) cách mặt bích 99 mm; nén hết lò xo 10 mm còn 89 mm → tool_length ≈ 99 mm (đo lại trên hàng thật)
+Va chạm ở tư thế CAD (J6 quay đủ vòng): KHÔNG
+Va chạm khi quét J5 từ −110° tới +110° (so với tư thế CAD, bước 10°): AX-4_1 tại J5 = 100…110°; AX-4_2 tại J5 = 110…110°; Nema17_Schrittmotor tại J5 = 110…110°
+Lưu ý: tháo 6 vít M3×10 đang cắm sẵn ở mặt ngoài mặt bích (giữ lại 6 đai ốc chìm); gá dùng 4 vít M3×12 ở các góc 60°, 120°, 240°, 300°.

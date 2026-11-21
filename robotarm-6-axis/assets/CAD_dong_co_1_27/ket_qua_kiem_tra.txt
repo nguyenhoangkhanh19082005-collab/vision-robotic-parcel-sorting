@@ -1,0 +1,7 @@
+AX-2_2: bớt 0.94 cm3 (hốc đuôi động cơ J3)
+AX-1_11: bớt 198 mm3 (4 lỗ Ø3.0 trên vòng Ø28)
+De_nang_J1: động cơ J1 mới thò 37.1 mm dưới đáy đế → đế nâng cao 43 mm (khe hở đuôi động cơ ≥ 5.9 mm), thể tích 141 cm3
+Kiểm tra va chạm động cơ J1: KHÔNG va chạm
+Kiểm tra va chạm động cơ J2: KHÔNG va chạm
+Kiểm tra va chạm động cơ J3: KHÔNG va chạm
+AX-2_2 mới ∩ động cơ J3: 0.0 mm3

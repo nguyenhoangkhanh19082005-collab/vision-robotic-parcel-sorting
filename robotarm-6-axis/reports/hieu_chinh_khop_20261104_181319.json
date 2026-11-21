@@ -1,0 +1,71 @@
+{
+ "firmware_cu": {
+  "GEAR_RATIOS": [
+   1.0,
+   5.181818,
+   5.181818,
+   5.181818,
+   2.5,
+   1.0
+  ],
+  "DIR_SIGNS": [
+   1.0,
+   1.0,
+   -1.0,
+   1.0,
+   1.0,
+   1.0
+  ]
+ },
+ "de_xuat": {
+  "GEAR_RATIOS": [
+   1.0,
+   5.181818,
+   5.181818,
+   5.181818,
+   2.5,
+   1.0
+  ],
+  "DIR_SIGNS": [
+   1.0,
+   1.0,
+   -1.0,
+   1.0,
+   1.0,
+   1.0
+  ]
+ },
+ "ket_qua": {
+  "2": {
+   "lenh_do": 20,
+   "firmware_bao_do": 20.0,
+   "quay": "c",
+   "cung_chieu_twin": "c",
+   "goc_that_do": null,
+   "ve_dung_cho_cu": "c"
+  },
+  "3": {
+   "lenh_do": 20,
+   "firmware_bao_do": 20.0,
+   "quay": "k"
+  },
+  "4": {
+   "lenh_do": 45,
+   "firmware_bao_do": 45.01,
+   "quay": "c",
+   "cung_chieu_twin": "c",
+   "goc_that_do": null,
+   "ve_dung_cho_cu": "c"
+  },
+  "6": {
+   "lenh_do": 90,
+   "firmware_bao_do": 90.0,
+   "quay": "c",
+   "cung_chieu_twin": "c",
+   "goc_that_do": null,
+   "tu_quay_sau_khi_dung": "c",
+   "ve_dung_cho_cu": "n",
+   "j6_tu_quay_khi_j2_chay": "c"
+  }
+ }
+}

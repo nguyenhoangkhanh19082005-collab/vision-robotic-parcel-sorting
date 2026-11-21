@@ -1,0 +1,65 @@
+Rút ngắn cẳng tay: 6.0 + 9.5 + 16.0 = 31.5 mm; trục J3 → tâm cổ tay 267.0 → 235.5 mm
+AX-3_1: bỏ lát ống s 75.0..84.5 (9.5 mm), nửa xa xoay +45° quanh trục
+  AX-3_1: thể tích 65.8 → 61.1 cm3 (lưới kín: cạnh hở 0, đa tạp True), số khối 1, BRepCheck gốc True → mới True
+AX-3_2: bỏ lát s 36.0..42.0 (6.0 mm); vát gờ ổ bi phía −X về x = -22.0 (bỏ 193 mm3)
+  AX-3_2: thể tích 66.0 → 61.0 cm3 (lưới kín: cạnh hở 0, đa tạp True), số khối 1, BRepCheck gốc True → mới True
+        (file STEP gốc: dung sai đỉnh của AX-4_4 tới 4.9 mm → siết về 0,001 mm trước khi hàn)
+AX-4_4: đoạn bầu s 154.5..187.0 (32.5 mm) → 16.5 mm (ngắn 16.0 mm); độ dốc thành so với trục: +X 56.5°, −X 50.2° (bản gốc ≈ 37°)
+        bề dày thành nhỏ nhất dọc đoạn bầu mới (mm; bản gốc 2,5): u=0.00:3.27, u=0.06:3.31, u=0.12:3.36, u=0.30:2.49, u=0.50:2.54, u=0.70:2.59, u=0.90:2.63, u=1.00:2.66
+  AX-4_4: thể tích 74.5 → 67.2 cm3 (lưới kín: cạnh hở 0, đa tạp True), số khối 1, BRepCheck gốc False → mới False
+Động cơ J4: xoay -38.1° quanh trục so với mô hình CAD (lỗ ren hộp số trùng lỗ tấm gá AX-3_3 đã xoay +45°) → thân vuông song song thành hộp
+  AX-3_1_rut_ngan.stl: 48406 tam giác, cạnh hở 0, đa tạp True, thể tích lưới 61.1 cm3 (khối CAD 61.1)
+  AX-3_2_rut_ngan.stl: 38040 tam giác, cạnh hở 0, đa tạp True, thể tích lưới 61.0 cm3 (khối CAD 61.0)
+  AX-4_4_rut_ngan.stl: 55296 tam giác, cạnh hở 0, đa tạp True, thể tích lưới 67.2 cm3 (khối CAD 67.8)
+Số chi tiết dời chỗ: 114; đã ghi E:\UDMT\robotarm-6-axis\assets\CAD_rut_ngan
+
+== 1. Chồng lấn (mm3) giữa các chi tiết có vị trí tương đối thay đổi: bản gốc → bản mới ==
+  163 cặp có hộp bao chạm nhau
+  AX-3_2_rut_ngan#16                 × STEPPERONLINE.17HS13-0404S-PG5#191:     65.0 →      0.0
+  Số cặp chồng lấn tăng: 0
+
+== 2. Khe hở nhỏ nhất (mm): bản gốc → bản mới ==
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ AX-3_2_rut_ngan#16                :   0.00 →   1.00
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ AX-3_1_rut_ngan#15                :   0.00 →   2.36
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ AX-3_3#17                         :   0.00 →   0.00
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Lager_65x50x7#120                 :   1.20 →   2.00
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Lager_65x50x7#121                 :   3.64 →   9.34
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ AX-2_2_sua#11                     :   3.37 →   2.00
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ AX-2_1#10                         :   3.37 →  10.00
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ ISK_M5x25_DIN912_M5x25#111        :  31.20 →  15.71
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Mutter_M5#177                     :  29.24 →  14.68
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ ISK_M3x20#56                      :  16.11 →  11.57
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ ISK_M3x20#57                      :  17.81 →  11.57
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ ISK_M3x20#58                      :  16.11 →  11.57
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ ISK_M3x20#59                      :  17.81 →  11.57
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Mutter_M3#126                     :  17.67 →  11.71
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Mutter_M3#127                     :  17.42 →  11.66
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Mutter_M3#128                     :  15.92 →  11.66
+  STEPPERONLINE.17HS13-0404S-PG5#191 ↔ Mutter_M3#129                     :  15.95 →  11.69
+  AX-3_4#18                          ↔ AX-3_1_rut_ngan#15                :   0.00 →   0.00
+  AX-3_4#18                          ↔ AX-3_3#17                         :   2.50 →   2.50
+  AX-3_4#19                          ↔ AX-3_1_rut_ngan#15                :   0.00 →   0.00
+  AX-3_4#19                          ↔ AX-3_3#17                         :   2.50 →   2.50
+  Nema17_Schrittmotor#182            ↔ AX-4_4_rut_ngan#24                :   0.35 →   0.35
+  AX-4_4_rut_ngan#24                 ↔ AX-3_1_rut_ngan#15                :   1.00 →   1.00
+  AX-4_4_rut_ngan#24                 ↔ AX-4_1#20                         :   0.00 →   0.00
+  AX-4_4_rut_ngan#24                 ↔ AX-4_2#21                         :   0.00 →   0.00
+  AX-4_4_rut_ngan#24                 ↔ Lager_52x40x7#118                 :   0.00 →   0.00
+  AX-4_4_rut_ngan#24                 ↔ AX-4_5#25                         :   0.00 →   0.00
+  AX-4_1#20                          ↔ AX-4_4_rut_ngan#24                :   0.00 →   0.00
+  AX-4_2#21                          ↔ AX-4_4_rut_ngan#24                :   0.00 →   0.00
+
+== 3. Quét khớp J3 (lưới tam giác đã giảm mật độ): số tam giác chạm cánh tay trên theo góc ==
+  bản gốc: không chạm trong khoảng ≤ -170° … 30° quanh trục J3 (0° = tư thế trong file CAD, bước 10°)
+     -170:0 -160:0 -150:0 -140:0 -130:0 -120:0 -110:0 -100:0 -90:0 -80:0 -70:0 -60:0 -50:0 -40:0 -30:0 -20:0 -10:0 0:0 10:0 20:0 30:0 40:467 50:925 60:1630 70:2759 80:5459 90:6115 100:5728 110:6299 120:6065 130:3109 140:1907 150:1288 160:559 170:0
+  bản mới: không chạm trong khoảng ≤ -170° … 30° quanh trục J3 (0° = tư thế trong file CAD, bước 10°)
+     -170:0 -160:0 -150:0 -140:0 -130:0 -120:0 -110:0 -100:0 -90:0 -80:0 -70:0 -60:0 -50:0 -40:0 -30:0 -20:0 -10:0 0:0 10:0 20:0 30:0 40:475 50:801 60:1954 70:2933 80:6220 90:6723 100:6493 110:7457 120:6136 130:3717 140:2015 150:1073 160:546 170:134
+  J4: mặt ghép AX-4_4 ↔ AX-3_1 tròn xoay, khe hở dọc trục 1,00 mm không đổi (mục 2) → quay J4 không bị ảnh hưởng.
+
+== 4. Mô-men trọng lực xấu nhất (tay duỗi ngang), giả định như research/cad_kiem_tra_mo_men.py ==
+  nhựa đặc 60 %, tải 0 g: J3 2.50 → 2.13 N·m (-14.6 %), J2 5.52 → 5.14 N·m (-6.9 %); sau J3 1.53 → 1.52 kg, trọng tâm cách J3 166 → 143 mm
+  nhựa đặc 60 %, tải 200 g: J3 3.16 → 2.73 N·m (-13.5 %), J2 6.49 → 6.05 N·m (-6.8 %); sau J3 1.73 → 1.72 kg, trọng tâm cách J3 186 → 162 mm
+  nhựa đặc 60 %, tải 500 g: J3 4.15 → 3.64 N·m (-12.5 %), J2 7.94 → 7.40 N·m (-6.8 %); sau J3 2.03 → 2.02 kg, trọng tâm cách J3 209 → 184 mm
+  nhựa đặc 100 %, tải 0 g: J3 2.81 → 2.40 N·m (-14.6 %), J2 6.26 → 5.81 N·m (-7.1 %); sau J3 1.74 → 1.72 kg, trọng tâm cách J3 165 → 143 mm
+  nhựa đặc 100 %, tải 200 g: J3 3.48 → 3.01 N·m (-13.6 %), J2 7.22 → 6.72 N·m (-7.0 %); sau J3 1.94 → 1.92 kg, trọng tâm cách J3 183 → 160 mm
+  nhựa đặc 100 %, tải 500 g: J3 4.47 → 3.91 N·m (-12.6 %), J2 8.67 → 8.08 N·m (-6.9 %); sau J3 2.24 → 2.22 kg, trọng tâm cách J3 204 → 180 mm

@@ -1,0 +1,14 @@
+Rút ngắn cẳng tay: 6.0 + 9.5 + 16.0 = 31.5 mm; trục J3 → tâm cổ tay 267.0 → 235.5 mm
+AX-3_1: bỏ lát ống s 75.0..84.5 (9.5 mm), nửa xa xoay +45° quanh trục
+  AX-3_1: thể tích 65.8 → 61.1 cm3 (lưới kín: cạnh hở 0, đa tạp True), số khối 1, BRepCheck gốc True → mới True
+AX-3_2: bỏ lát s 36.0..42.0 (6.0 mm); vát gờ ổ bi phía −X về x = -22.0 (bỏ 193 mm3)
+  AX-3_2: thể tích 66.0 → 61.0 cm3 (lưới kín: cạnh hở 0, đa tạp True), số khối 1, BRepCheck gốc True → mới True
+        (file STEP gốc: dung sai đỉnh của AX-4_4 tới 4.9 mm → siết về 0,001 mm trước khi hàn)
+AX-4_4: đoạn bầu s 154.5..187.0 (32.5 mm) → 16.5 mm (ngắn 16.0 mm); độ dốc thành so với trục: +X 56.5°, −X 50.2° (bản gốc ≈ 37°)
+        bề dày thành nhỏ nhất dọc đoạn bầu mới (mm; bản gốc 2,5): u=0.00:3.27, u=0.06:3.31, u=0.12:3.36, u=0.30:2.49, u=0.50:2.54, u=0.70:2.59, u=0.90:2.63, u=1.00:2.66
+  AX-4_4: thể tích 74.5 → 67.2 cm3 (lưới kín: cạnh hở 0, đa tạp True), số khối 1, BRepCheck gốc False → mới False
+Động cơ J4: xoay -38.1° quanh trục so với mô hình CAD (lỗ ren hộp số trùng lỗ tấm gá AX-3_3 đã xoay +45°) → thân vuông song song thành hộp
+  AX-3_1_rut_ngan.stl: 48406 tam giác, cạnh hở 0, đa tạp True, thể tích lưới 61.1 cm3 (khối CAD 61.1)
+  AX-3_2_rut_ngan.stl: 38040 tam giác, cạnh hở 0, đa tạp True, thể tích lưới 61.0 cm3 (khối CAD 61.0)
+  AX-4_4_rut_ngan.stl: 55296 tam giác, cạnh hở 0, đa tạp True, thể tích lưới 67.2 cm3 (khối CAD 67.8)
+Số chi tiết dời chỗ: 114; đã ghi E:\UDMT\robotarm-6-axis\assets\CAD_rut_ngan

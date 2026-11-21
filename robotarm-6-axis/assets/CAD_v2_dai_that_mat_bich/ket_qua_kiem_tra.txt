@@ -1,0 +1,39 @@
+
+===== J2 =====
+  puly lớn gốc Riemenscheibe_55mm thay bản khoan lỗ mặt bích; lệch hộp bao 0.000 mm
+  AX-2_5: đế phẳng Ø23 (thêm 950 mm3) + 4 lỗ mồi Ø2.5 sâu 7 → hợp lệ True, thể tích 80.71 → 81.53 cm3
+  nhựa còn lại sau đáy lỗ mồi: 3.99 mm
+  bu lông: đầu mũi w -29.00 → -39.00; moay-ơ mặt bích w -27.50 … -39.45; vít hãm tại w -36.25 → bu lông ĐỦ chiều dài (mũi nằm trong 0.45 mm so với đầu moay-ơ)
+  vít hãm moay-ơ: khoảng trống hướng kính tới thành khâu 34.9 mm (hướng 330°) … thông ra ngoài (hướng 135°) — xoay mặt bích để vít hãm nằm ở hướng thoáng
+
+===== J3 =====
+  puly lớn gốc Riemenscheibe_40mm thay bản khoan lỗ mặt bích; lệch hộp bao 0.000 mm
+  AX-3_2: đế phẳng Ø23 (thêm 24 mm3) + 4 lỗ mồi Ø2.5 sâu 6.5 → hợp lệ True, thể tích 65.95 → 65.85 cm3
+  nhựa còn lại sau đáy lỗ mồi: 1.49 mm
+  bu lông: đầu mũi w -29.50 → -39.50; moay-ơ mặt bích w -24.50 … -36.45; vít hãm tại w -33.25 → bu lông ĐỦ chiều dài (mũi thò 3.05 mm so với đầu moay-ơ)
+  vít hãm moay-ơ: khoảng trống hướng kính tới thành khâu 32.5 mm (hướng 105°) … thông ra ngoài (hướng 345°) — xoay mặt bích để vít hãm nằm ở hướng thoáng
+  [3] AX-1_3 → AX-1_3_cang_dai_J2_v2 (hợp lệ True)
+  [10] AX-2_1 → AX-2_1_cang_dai_J3_v2 (hợp lệ True)
+  [12] AX-2_3_khoet_mat_bich_J3 → AX-2_3_ranh_cang_dai_J3 (hợp lệ True)
+  thêm Ga_giac_hut_J6
+  thêm Giac_hut_L60-M12_HSP-40_mo_phong
+  bỏ 6 vít M3×10 ở mặt ngoài mặt bích J6 (vướng gá giác hút — theo thiết kế gá)
+
+Lắp ráp: 194 chi tiết
+  AX-1_3_cang_dai_J2_v2: chồng lấn AX-1_6 35.7 mm3 (có sẵn trong bản gốc: 35.7 mm3)
+  AX-2_1_cang_dai_J3_v2: chồng lấn AX-1_6 245.0 mm3 (có sẵn trong bản gốc: 245.0 mm3)
+  AX-2_3_ranh_cang_dai_J3: chồng lấn KHÔNG
+  AX-2_5_mat_bich_J2: chồng lấn Mutter_M5 10.5 mm3 (có sẵn trong bản gốc: 10.5 mm3)
+  AX-3_2_mat_bich_J3: chồng lấn STEPPERONLINE.17HS13-0404S-PG5 65.0 mm3 (có sẵn trong bản gốc: 65.0 mm3)
+  ISK_M5x35_DIN912_J3: chồng lấn Mutter_M5 20.9 mm3 (có sẵn trong bản gốc: 20.9 mm3), Mat_bich_5mm_J3_phia_khau 1.3 mm3 (MỚI)
+  ISK_M5x35_DIN912_J2: chồng lấn Mutter_M5 20.9 mm3 (có sẵn trong bản gốc: 20.9 mm3), Mat_bich_5mm_J2_phia_khau 1.3 mm3 (MỚI)
+  Riemenscheibe_16mm_J3_nang_3mm: chồng lấn Dong_co_moi_J3 155.5 mm3 (có sẵn trong bản gốc: 204.6 mm3)
+  Riemenscheibe_16mm_J2_nang_3mm: chồng lấn Dong_co_moi_J2 155.5 mm3 (có sẵn trong bản gốc: 204.6 mm3)
+  Mat_bich_5mm_J2_phia_khau: chồng lấn KHÔNG
+  Mat_bich_5mm_J3_phia_khau: chồng lấn KHÔNG
+  Ga_giac_hut_J6: chồng lấn KHÔNG
+  Giac_hut_L60-M12_HSP-40_mo_phong: chồng lấn KHÔNG
+
+Dây đai GT2 6 mm ở mặt phẳng thật (giữa vùng răng puly nhỏ đã nâng):
+  J2: đai w -3.75 … 2.25 (vùng răng puly lớn −8.0 … 0.0, puly nhỏ đã nâng −4.5 … +3.0) chạm: ['Riemenscheibe_55mm_J2 356 mm3']
+  J3: đai w -3.75 … 2.25 (vùng răng puly lớn −8.0 … 0.0, puly nhỏ đã nâng −4.5 … +3.0) chạm: ['Riemenscheibe_40mm_J3 250 mm3']

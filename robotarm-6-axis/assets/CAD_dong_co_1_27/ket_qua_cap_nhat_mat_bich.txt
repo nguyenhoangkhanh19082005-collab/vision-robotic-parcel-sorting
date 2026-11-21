@@ -1,0 +1,3 @@
+Mat_bich_5mm_J2: KHÔNG va chạm
+Mat_bich_5mm_J3: KHÔNG va chạm
+Số chi tiết trong file lắp ráp: 198
