@@ -192,3 +192,28 @@ Trong cả ba cách, ghi `decision = 'PASS'` thì đơn hàng tự chuyển sang
   chưa đổi và phần mềm chưa được thử với tem A7 thật.
 - **Chưa chạy thử với webcam và key thật.** Phần ghi dữ liệu mới được kiểm tra bằng test
   tự động và bằng một lần ghi thử trên database (đã hủy sau khi thử).
+
+## 8. Cập nhật 2026-11-25: chạy tự động với băng tải
+
+Đã làm sẵn trên máy trạm, bạn không cần làm lại:
+- Cài `supabase` 2.34 và `python-dotenv` vào `E:\UDMT\.venv` (môi trường của `run_station.bat`).
+- `config/default.yaml`: `supabase.enabled: true`, `classification.local_test_mode: false`.
+- `run_station.bat` (SortingStation) có gửi kết quả lên web. Trước bản này trạm tích hợp không gửi gì.
+
+**Việc còn lại duy nhất: tạo file `.env`.** Đặt file ở `E:\UDMT\Webcamandconveyor\too\MachineVision\.env`, có 2 dòng:
+```
+SUPABASE_URL=https://<project-id>.supabase.co
+SUPABASE_KEY=<key máy trạm>
+```
+Khi chưa có file này, phần mềm vẫn mở và chạy ở chế độ kiểm tra cục bộ. Ô SUPABASE báo "chưa cấu hình", rê chuột vào ô để xem lý do.
+
+Cách chạy khi đã có `.env`:
+| Việc | Cách làm |
+|---|---|
+| Tra cứu đơn | Danh sách đơn (chỉ cột định tuyến, không có tên hay số điện thoại) tải về khi mở phần mềm, làm mới mỗi 60 s (`cache_refresh_s`). Mất mạng ngắn vẫn tra được. |
+| Mã không có trong bản sao | Hỏi Supabase một lần, chờ tối đa 4 s. Không hỏi được thì kiện thành MANUAL_REVIEW ("Không tra cứu được đơn…"), không bị REJECT oan là "mã lạ". |
+| Gửi kết quả | Ghi vào `captures/supabase_outbox.jsonl` trước, rồi luồng nền gửi theo thứ tự. Băng tải không bao giờ chờ mạng. |
+| Mất mạng | Kết quả nằm chờ trong outbox, tự thử lại mỗi 10 s (`retry_s`). Tắt máy giữa chừng thì lần mở sau gửi tiếp. |
+| Ô SUPABASE trên GUI | `ONLINE` (đã gửi), `OFFLINE · n chờ gửi` (mất mạng), `READY` (chưa gửi kết quả nào). Rê chuột để xem chi tiết. |
+| Đơn trên web | Kiện PASS: trigger `sorting_logs_apply` chuyển đơn sang `SORTED` và ghi `sorted_at`. Đã kiểm trên database thật 25/11 bằng giao dịch có rollback. Kiện REJECT / MANUAL_REVIEW: đơn giữ nguyên trạng thái, kết quả xem ở `v_sorting_exceptions`. |
+

@@ -21,13 +21,18 @@ def test_model_matches_robot_simulation_transforms(paths):
         assert np.allclose(sim[name], mine[index], atol=1e-12)
 
 
-def test_home_pose_is_upright_l_shape(model):
-    """Ở q=0, TCP phải ở phía trên đế (khác bảng DH cũ cho Z≈-181 mm)."""
+def test_home_pose_is_real_home(model):
+    """24/11/2026 (lần 3): tư thế 0 = HOME THẬT: J2 cúi trước 12.5°, cẳng tay chúc 25°, đầu hút gần thẳng xuống (≈3°)."""
     tcp = model.fk(np.zeros(6))
-    # 15/11/2026: tư thế 0 mới là chữ L chuẩn (cẳng tay nằm ngang) → TCP ngang tầm khuỷu: 354 mm × robot.scale
-    assert tcp[2, 3] > 0.25
-    assert tcp[0, 3] > 0.2
+    assert 0.23 < tcp[0, 3] < 0.27    # ≈ 252 mm × scale phía trước (băng tải)
     assert abs(tcp[1, 3]) < 0.01
+    assert 0.05 < tcp[2, 3] < 0.10    # ≈ 77 mm × scale, cao hơn mặt băng (39 mm)
+    assert tcp[2, 2] < -0.99          # đầu hút chỉ gần thẳng xuống
+    # Tư thế dựng thẳng đứng = chữ L (J2 −12.5, J3 −12.5, J5 −22, J6 +124) rồi J3 −90°, J5 +90°
+    up = model.fk(np.radians([0, -12.5, -102.5, 0, 68, 124]))
+    assert up[2, 3] > 0.6
+    assert np.hypot(up[0, 3], up[1, 3]) < 0.01
+    assert up[2, 2] > 0.99
 
 
 def test_jacobian_matches_finite_difference(model):

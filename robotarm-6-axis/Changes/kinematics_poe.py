@@ -165,6 +165,12 @@ class RobotModel:
         )
         forward = wrist_center - origin
         x_axis = forward - (forward @ z_axis) * z_axis
+        if np.linalg.norm(x_axis) < 0.05:
+            # 22/11/2026: tư thế 0 = DỰNG THẲNG ĐỨNG → tâm cổ tay nằm trên trục J1. Lấy hướng cẳng tay ở chữ L
+            # (J3 = +90°) làm X base, giữ hệ tọa độ như trước.
+            elbow = screw_transform(self.points[2], self.axes[2], math.radians(90.0))
+            forward = (elbow @ np.append(wrist_center, 1.0))[:3] - origin
+            x_axis = forward - (forward @ z_axis) * z_axis
         x_axis = _unit(x_axis)
         y_axis = np.cross(z_axis, x_axis)
         cad_from_base = np.eye(4)

@@ -285,3 +285,189 @@
 - `SortingStation/.gitignore` (mới).
 - Hướng dẫn tự upload và README repo tổng: `docs/github/HUONG_DAN_UPLOAD_GITHUB.md`, `docs/github/README_repo_tong.md`.
 - Đã thử: lọc robocopy (MachineVision 120 file, ảnh còn lại đều bị .gitignore chặn trừ logo và sơ đồ mạch), `git reset` trên repo chưa có commit, các luật ignore không làm rơi file mã nguồn.
+- Bổ sung (cùng ngày): đã tạo bản upload `E:\UDMT\_github\he-thong-phan-loai` (516 file, 473 MB), git local với 3 commit, tác giả duy nhất là người dùng (không có dòng co-author). Repo sẽ để public, nên trong bản upload ID project Supabase được thay bằng `<project-id>` (`docs/HUONG_DAN_UPLOAD_TRANG_THAI.md`, `docs/supabase_bo_sung_2026-11-10.sql`); bản gốc trong `E:\UDMT` không đổi. Push lên GitHub sẽ làm khi có URL repo.
+- Đã push lên https://github.com/nguyenhoangkhanh19082005-collab/vision-robotic-parcel-sorting (public, nhánh `main`, 3 commit, đỉnh `b56625d`).
+
+## 2026-11-21 — developer — Firmware: bảo vệ đai J2 (đai 240-2GT-6 đứt khi nâng tay duỗi thẳng)
+- Người dùng thay đai J2 240 → 250 mm, khớp chiều dài theo CAD 80T/20T, C = 72.6.
+- Nguyên nhân: đai J2 nằm sau hộp số 1:27. Ở 1770 mA, lực nhánh căng tối đa ≈ 1280 N, vượt sức chịu của đai cao su 6 mm.
+- `robotarmver2/robotarmver2.ino`:
+  - J2 dòng chạy mặc định 1770 → 1200 mA (lực đai tối đa ≈ 870 N).
+  - J2 tốc độ 30 → 20 °/s, gia tốc 60 → 20 °/s².
+  - Lệnh mới `$I <khớp> <mA>` (300–1770) đổi dòng ngay khi đang chạy. `$S` lưu (khóa NVS `cur_v1`), `$R` xóa, `$P` in dòng và lực đai J2 ước tính.
+  - `configureDriver()` dùng `motor_current[]` thay hằng số.
+- Đã biên dịch: arduino-cli esp32s3 OK (389 KB). Chưa nạp, chưa chạy trên robot.
+
+## 2026-11-22 — developer — Mô phỏng ý tưởng bù trọng lực J2 (lò xo kéo + cáp qua ròng rọc)
+- Mới: `src/cad/mo_phong_bu_trong_luc_J2.py`, dùng mesh twin v3 và `dong_hoc_step.py`.
+- Đầu ra: `assets/Mo_phong_bu_trong_luc_J2/` gồm `mo_phong_bu_trong_luc_J2.gif`, `tong_hop_bu_trong_luc_J2.png`, `ket_qua.txt`.
+- Giả định khối lượng = thể tích mesh × 1.2 g/cm³, tải 0.15 kg (chưa đo).
+- Kết quả: mô-men trọng lực J2 khi duỗi ngang ≈ 3.6 N·m, tương ứng đai ≈ 142 N.
+- Lò xo k ≈ 0.27 N/mm (A = 90 mm, B = 120 mm, bù 80 %) giảm lực đai còn ≈ 29 N.
+- Đây mới là ý tưởng, chưa thiết kế chi tiết in.
+
+## 2026-11-22 — developer — Firmware: KHÓA J2 BẰNG ĐIỆN (động cơ giữ cứng J2, chỉ dùng J1, J3–J6 để gắp)
+- `robotarmver2/robotarmver2.ino`:
+  - Lệnh `$J <độ>` đưa J2 tới góc đó rồi khóa; `$J` khóa tại góc hiện tại; `$J U` mở khóa.
+  - `$S` lưu (khóa NVS `j2lock`), `$R` xóa.
+  - Khi khóa, `moveSynchronized` luôn lấy đích J2 = góc khóa, bỏ qua lệnh J2 từ PC và AUTO.
+  - Động cơ vẫn cấp dòng giữ (0.8 × 1200 mA).
+  - Bản đầu (tắt driver, dành cho chặn cơ khí) đã bỏ theo yêu cầu người dùng.
+- Đã biên dịch: arduino-cli esp32s3 OK. Chưa nạp.
+
+## 2026-11-22 — developer — Tư thế 0 = DỰNG THẲNG ĐỨNG (theo người dùng)
+- `src/cad/tinh_dong_hoc_tu_step.py`: thêm `ZERO_UPRIGHT = True`; cẳng tay ở q = 0 dựng theo trục J1. Đã chạy lại, sinh `dong_hoc_step.py` mới.
+  - CAD_TO_ZERO J3: +11.61 → −78.39.
+  - Chữ L cũ tương ứng J3 = +90° theo quy ước mới.
+  - Kích thước khâu không đổi.
+- `kinematics_poe.py` (và `Changes/`): hệ base X lấy theo hướng cẳng tay ở chữ L (J3 +90°) khi tâm cổ tay nằm trên trục J1. Hệ tọa độ base giữ như cũ.
+  - FK q=0: TCP (0, 0, 772.5) mm. J3 +90: (418.5, 0, 354.0) mm, trùng TCP chữ L cũ.
+  - IK round-trip đạt.
+- `robotarmver2.ino`: firmware không có phần nào phụ thuộc tư thế 0. Chỉ thêm thông báo Serial: tư thế 0 = dựng thẳng đứng và robot phải ở tư thế đó khi bật nguồn. Biên dịch OK.
+- `robot_simulation.py`, `tests/hieu_chinh_khop.py`: cập nhật chú thích, lời nhắc.
+- Ảnh đối chiếu: `reports/dong_hoc/tu_the_0_dung_thang.png`.
+- Lưu ý: phải "Lưu Gốc" lại trên robot ở tư thế dựng thẳng đứng. Mốc chữ L cũ trong Flash không còn đúng.
+
+## 2026-11-22 — developer — Đảo chiều quay J1, J3, J4, J5 theo twin (tư thế 0 dựng thẳng)
+- Người dùng đối chiếu robot thật với digital twin: J1, J3, J4, J5 quay ngược (lệnh âm ra dương); J2, J6 đúng.
+- `DIR_SIGNS` mặc định = {-1, 1, -1, -1, -1, 1}.
+- `loadFromFlash`: nếu Flash có hiệu chỉnh `cal_v1` cũ (đã `$S`), đảo dấu J1, J3, J4, J5 đúng 1 lần, ghi lại, đánh dấu NVS `dir22`.
+- Dấu nằm trong steps_per_degree nên telemetry Act vẫn cùng dấu với lệnh. Đã biên dịch (390 KB), CHƯA nạp.
+- File: robotarmver2/robotarmver2.ino
+
+## 2026-11-23 — developer — Xuất STEP toàn trạm phân loại (nộp thầy)
+- Pipeline 4 bước trong `src/cad/`:
+  - `tram_step_1_doc_robot.py`: đọc lắp ráp robot v3 (194 chi tiết).
+  - `tram_step_2_gan_khau.py`: gán chi tiết vào khâu bằng khớp lưới twin (sai lệch < 0.35 mm), đặt robot ở tư thế HOME 0 (dựng thẳng).
+  - `tram_step_3_xuat_tram.py`: dựng băng tải, 3 thùng, kiện mẫu, mặt bàn (khối đặc B-rep) theo station.yaml; đầu đèn ring từ OBJ người dùng (bỏ chân tripod, lưới → khối đặc); webcam C260 STEP người dùng.
+  - `tram_step_4_render.py`: render kiểm tra.
+- Kết quả: `assets/CAD_tram_tong/Tram_phan_loai_tong.step` (cây lắp ráp 7 nhóm, có màu, mm, hệ base robot), `tram_phan_loai_tong.png`, `ket_qua.txt`.
+- Giả định chưa đo: vòng đèn Ø ngoài 260 mm; cột đèn đặt phía +X ngoài băng tải, vòng nằm ngang tâm trên băng tại camera.y; webcam ở tâm vòng nhìn xuống; mặt bàn 900×800×10 mm.
+- Cài thêm scipy vào E:\UDMT\.venv (cache .tmp\pip).
+
+## 2026-11-23 — developer — STEP toàn trạm: thêm gá camera/đèn/cảm biến của nhóm
+- Nguồn chép vào `assets/CAD_tram_tong/nguon/`: `Gia_camera_den_cam_bien.step` (PHANLOAIHANG xuất từ Fusion), `Webcam_C260.step`, `Den_ring.obj`.
+- `src/cad/tram_step_3_xuat_tram.py`:
+  - Gá chắn ngang băng, đầu thanh đế phía cảm biến trùng cuối băng (Y base = 100 mm).
+  - Cảm biến quang M18 (khối trụ đơn giản hóa) trong vòng kẹp Ø18.5: trục tại Y = 75.6 mm, cao hơn mặt băng 32 mm.
+  - Webcam treo dưới tay đòn trên, nhìn xuống, tâm ống kính nhích 35 mm về đầu băng (ước lượng), cao hơn mặt băng 137 mm.
+  - Vòng đèn nằm ngang, đồng tâm webcam, sát trên tay đòn (238 mm trên mặt băng); bỏ ống đứng/tripod.
+- `tram_step_4_render.py`: thêm góc cận cảnh gá.
+- Kết quả: `Tram_phan_loai_tong.step` 108 MB, 236 khối, 9 nhóm.
+
+## 2026-11-23 — developer — Firmware: lắp lại đai 240-2GT-6 cho J2, giới hạn lực đai theo dòng
+- `robotarmver2.ino`:
+  - Dòng chạy J2 1200 → 500 mA. Lực đai tối đa ≈ 360 N, gấp 2.5 lần lực cần để nâng tay duỗi ngang (≈ 141 N, 196 mA), bằng 28 % lực lúc đai đứt.
+  - Dòng giữ 0.8 × 500 = 400 mA ≈ 290 N.
+  - Trần cứng `J2_CURRENT_MAX_MA` = 700 mA: `$I 2` không vượt được; dòng J2 cũ lưu trong Flash cao hơn trần thì tự về 500 mA.
+  - Tốc độ 20 °/s, gia tốc 20 °/s² giữ nguyên.
+- Biên dịch OK (391 KB). CHƯA nạp.
+- File nạp: `robotarmver2/firmware_xuat/2026-11-23_dai240_J2_500mA/` (merged.bin nạp ở 0x0, .bin ứng dụng ở 0x10000).
+
+## 2026-11-23 — developer — Firmware: J5 tăng dòng để nâng được đầu hút
+- `robotarmver2.ino`:
+  - Dòng chạy J5 900 → 1200 mA (mô-men +33 %).
+  - `HOLD_MULT` J5 0.8 → 0.7 (dòng giữ 840 mA, không vượt 0.9 A nếu động cơ 17PM là bản cuộn 0.9 A).
+  - Dòng J5 cũ lưu Flash < 1200 mA tự nâng lên 1200 khi khởi động.
+- Biên dịch OK. Bản nạp mới (gồm cả thay đổi J2 500 mA): `robotarmver2/firmware_xuat/2026-11-23_dai240_J2_500mA_J5_1200mA/`. CHƯA nạp.
+
+## 2026-11-23 — developer — STEP toàn trạm: bố trí 3 thùng mới + xuất mesh thiết bị cho twin
+- `src/cad/tram_step_3_xuat_tram.py`: ghi thêm STL gá/webcam/đèn/cảm biến + manifest.json vào `E:\UDMT\SortingStation\assets\station_equipment\`. STEP xuất lại theo vị trí thùng mới trong station.yaml.
+
+## 2026-11-23 — developer — Trạm: cảm biến E18-D80NK thật, đèn ring Ø200, kiện nhỏ hơn, kiểm tra va chạm
+- `src/cad/tram_step_3_xuat_tram.py`: cảm biến dùng STEP E18-D80NK + 2 đai ốc của người dùng (nguon/, CC BY-4.0), luồn qua vòng kẹp gá, mắt quang hướng vào băng. Đèn ring 260 → 200 mm.
+- `src/cad/kiem_tra_va_cham_tram.py` (mới): đo khoảng cách robot ↔ thiết bị trạm trên đường đi gắp – thả của cả 3 thùng.
+  - Kết quả: VẪN VA CHẠM. Điểm gắp nằm ngay dưới gá: cổ tay chạm webcam + tay đòn gá, cẳng tay xuyên vòng đèn; đường sang thùng TRUNG DU cắt qua gá.
+  - Thu nhỏ đèn tới Ø160 cũng không hết va chạm.
+  - Báo cáo: `reports/va_cham_tram_23_11.txt`.
+- STEP xuất lại (124 MB).
+
+## 2026-11-24 — developer — Giác hút: bơm + van điện từ qua L298N theo schematic V1.0
+- `robotarmver2.ino`:
+  - Bơm → IN1 = GPIO10, van → IN3 = GPIO11 (IN2, IN4 nối GND; ENA/ENB giữ jumper), kích mức CAO.
+  - Tắt Ethernet W5500 (`USE_W5500 0`) vì W5500 dùng GPIO10/11 cho SPI; chỉ điều khiển qua USB.
+  - HÚT: van tắt → bơm chạy. NHẢ: bơm tắt → van mở 600 ms (`VALVE_RELEASE_MS`) rồi tự tắt, telemetry báo TẮT. TẮT: tắt cả hai.
+  - Gói MOVE mang lại cùng trạng thái dụng cụ thì bỏ qua (không kích lại xung xả).
+  - `VALVE_OPEN_WHEN_SUCK` = 1 nếu van là loại phải cấp điện mới thông khí lúc hút.
+  - Biên dịch OK (388 KB). File nạp: `firmware_xuat/2026-11-24_L298N_bom_van_GPIO10_11/`. CHƯA nạp.
+- `uis/robodk_ui.py`: khối "GIÁC HÚT (BƠM + VAN ĐIỆN TỪ)" — nút HÚT / NHẢ / TẮT to, có màu, đèn trạng thái.
+- `main.py`:
+  - Đèn trạng thái theo telemetry `tool_state` (chưa kết nối: theo lệnh).
+  - Sau NHẢ 0.8 s, GUI tự về TẮT.
+  - SortingStation dùng lại giao diện này qua `robot_bridge` (pytest 22/22, smoke OK).
+
+## 2026-11-24 — developer — Cơ cấu giác hút (giác hút, van AirTAC, bơm) vào STEP toàn trạm và twin
+- `src/cad/tram_step_3_xuat_tram.py`:
+  - Giác hút L60-M12 + HSP-40-2 (DP-40) chi tiết theo ảnh shop, thay khối nón mô phỏng, đặt đúng TCP. Gồm: cốc Ø40 cao 22, lục giác, lò xo, ren M12×1 + 2 đai ốc, núm Ø6; tổng 74 mm.
+  - Thêm nhóm `Cum_giac_hut_bom_van` (21 khối):
+    - Van AirTAC 4V210-08: thân, cuộn 12 V, giắc DIN, nối nhanh PC602 cổng A/B/P, giảm thanh BSL01 cổng R/S. File nguồn chỉ có SolidWorks nên dựng theo kích thước catalog, ước lượng.
+    - Bơm hút DC: đầu bơm, động cơ 370, đế in 3D; kích thước ước lượng từ ảnh.
+    - Đặt trên bàn phía sau robot, vị trí ước lượng.
+- `src/cad/tram_step_5_dung_cu_J6.py` (mới): xuất `link_6_tool_ga.stl`, `link_6_tool_giac_hut.stl` (hệ file mesh khâu 6) cho twin.
+- `robot_simulation.py`: vẽ gá + giác hút gắn khâu 6; `set_tool_state()` tô màu giác hút (xám TẮT / xanh HÚT / cam NHẢ).
+- `main.py`: gọi `set_tool_state()` theo đèn trạng thái.
+- STEP 124 MB, 268 khối, 10 nhóm.
+
+## 2026-11-24 — developer (tư thế 0 chữ L đầu hút chúc xuống, khóa cứng J2, giới hạn J3, J5 1400 mA)
+- Tư thế 0 mới theo ảnh robot thật: cánh tay trên đứng, cẳng tay ngang hướng +X (băng tải), trục J6/đầu hút chỉ thẳng xuống.
+  - `src/cad/tinh_dong_hoc_tu_step.py`: thêm `ZERO_TOOL_DOWN` (ZERO_UPRIGHT = False) → chạy lại sinh `dong_hoc_step.py`
+    (CAD_TO_ZERO_DEG = [0, 5.886, 11.611, -13.24, -74.488, 0]). So với tư thế dựng đứng 22/11: J3 −90°, J5 +90°.
+    Kiểm tra FK: q = 0 → TCP (251, 0, 186.5) mm, trục hút (0, 0, −1). Bản cũ lưu `.tmp/dong_hoc_step_dung_thang_24_11.py`.
+  - `robot_simulation.py`: cập nhật chú thích tư thế 0.
+- Giới hạn khớp (quy ước mới): J3 [-225, 45] (dải cũ dời −90° rồi thu hẹp 15° mỗi phía), J5 [-20, 200] (dải cũ dời +90°).
+  File: `donghoc.py` (joint_limits + hằng `J2_LOCK_DEG = 0.0`), `kinematics_poe.py` (= bản sao SortingStation `robot_model.py`,
+  nay có `lock_joint` và IK 2 cấp cho khớp khóa), `uis/robodk_ui.py` (slider đọc giới hạn từ donghoc; slider/spin J2 khóa ở 0° và bị vô hiệu),
+  `main.py` (`self.kin.lock_joint(1, J2_LOCK_DEG)`, nghiêng đầu hút ≤ 15°).
+- Firmware `robotarmver2/robotarmver2.ino`:
+  - `J2_HARD_LOCK 1`, `J2_HARD_LOCK_DEG 0`: J2 luôn giữ 0°, `$J`/`$J U`/`$R`/Flash không mở được.
+  - `J3_MIN_DEG/J3_MAX_DEG = -225/45`: kẹp mọi lệnh J3 trong `moveSynchronized`.
+  - J5: dòng 1200 → 1400 mA (dòng Flash thấp hơn tự nâng), tốc độ 45 °/s, gia tốc 90 °/s² (trước ≈ 99 °/s).
+  - Biên dịch đạt (387 896 byte). Bin: `robotarmver2/firmware_xuat/2026-11-24b_tu_the0_L_J2_khoa_J3_J5_1400/`. CHƯA nạp.
+- Lưu ý: điểm dạy/waypoint lưu trước đây theo tư thế 0 dựng đứng → đổi: J3_mới = J3_cũ − 90, J5_mới = J5_cũ + 90.
+
+## 2026-11-24 (lần 3) — developer — Home = tư thế thật (J2 cúi trước 12.5°), khóa giữ J4–J6
+- Tư thế 0 twin = home thật theo ảnh người dùng: so với chữ L (cánh tay trên đứng, cẳng tay ngang, đầu hút xuống) cộng thêm
+  J2 +12.5° (cúi về trước), J3 +12.5°, J5 +22°, J6 −124° (J4 1° coi là 0) → cẳng tay chúc 25°, đầu hút nghiêng 3°.
+  Giữ nguyên hướng cẳng tay/đầu hút như ảnh (cộng thẳng J3 25° sẽ đặt giác hút dưới mặt băng). FK home: TCP (252, 0, 77) mm.
+  - `src/cad/tinh_dong_hoc_tu_step.py`: `HOME_EXTRA_DEG = [0, 12.5, 12.5, 0, 22, -124]` (dấu J2 "về trước" tự xác định); sinh lại `dong_hoc_step.py`
+    (CAD_TO_ZERO_DEG = [0, 18.386, 24.111, -13.24, -52.488, -124]). Bản trước: `.tmp/dong_hoc_step_chu_L_24_11b.py`.
+  - Đổi điểm dạy theo chữ L (24/11 lần 2): q_mới = q_cũ − [0, 12.5, 12.5, 0, 22, −124].
+- Giới hạn khớp (`donghoc.py`, `SortingStation/sorting_station/robot_model.py`, `kinematics_poe.py`): J2 [-102.5, 97.5] (khóa 0),
+  J3 [-220, 20] (theo quét va chạm cẳng tay ↔ cánh tay trên), J5 [-42, 178].
+- Firmware `robotarmver2.ino`: `WRIST_HOLD_LOCK 1` → HOLD_MULT J4–J6 = 1.0 (giữ 100 % dòng khi đứng yên sau mỗi lệnh, chống dây bơm kéo);
+  J3_MIN/MAX = -220/20. Biên dịch đạt (387 892 byte). Bin: `robotarmver2/firmware_xuat/2026-11-24c_home_that_J2_cui_khoa_J4_J6_giu/`. CHƯA nạp.
+- `SortingStation/config/station.yaml`: pick [250, 0, 87]; thả DONG_BANG [100, 255, 140], LOI [220, 170, 150], TRUNG_DU [320, 30, 180] (nghiêng 12.8°).
+- `SortingStation/tests/test_robot_model.py`: `test_home_pose_is_real_home`. pytest 22/22 đạt.
+
+## 2026-11-24 (lần 4) — developer — Record / Playback từ PC (phục vụ video demo)
+- `main.py`: "Add Target" = RECORD điểm (6 góc lệnh chính xác + trạng thái giác hút người dùng bấm gần nhất: TẮT/HÚT/NHẢ,
+  NHẢ chỉ gắn 1 điểm). Lưu `programs/record_demo.json`, tự nạp khi mở app. "Run Auto" = PLAYBACK N vòng từ PC:
+  gửi góc → chờ robot thật tới (telemetry, `_wait_robot_reached`) → bật/tắt giác hút → chờ 0.8 s; twin chạy đồng bộ.
+  Menu chuột phải trên cây: đi tới / ghi đè / xóa điểm / xóa toàn bộ. Nút EMERGENCY STOP dừng playback.
+  Không gửi $REC vào Flash ESP32 nữa (chế độ AUTO firmware không đồng bộ twin, tối đa 20 điểm, lặp vô hạn).
+- Kiểm tra: smoke test offscreen (record 4 điểm, nạp lại, playback mô phỏng) đạt. Chưa chạy trên robot thật.
+- Bản trước: `.tmp/main_truoc_record_24_11.py`.
+
+## 2026-11-24 (lần 5) — developer — Record nhiều chương trình (mỗi sọt 1 chương trình)
+- `main.py`: chương trình record có tên, mặc định "Sọt 1", "Sọt 2" (tạo / đổi tên / xóa thêm được). Chuột phải cây
+  Waypoint Targets → "Chương trình đang ghi" để đổi; "Add Target" ghi vào chương trình đang chọn. "Run Auto" chọn
+  1 chương trình hoặc "Lần lượt tất cả" + số vòng. File `programs/record_demo.json` v2 (tự chuyển từ v1 → "Sọt 1").
+- Smoke test offscreen (chuyển v1, ghi 2 chương trình, nạp lại, chạy lần lượt) đạt. Bản trước: `.tmp/main_record1chuongtrinh.py`.
+
+## 2026-11-24 (lần 6) — developer — GUI tự tắt: bắt lỗi toàn cục
+- Nhật ký Windows: python.exe chết trong Qt6Core.dll, mã 0xc0000409 (18:19, 18:21 ngày 24/11; 19:35 ngày 23/11) =
+  PyQt6 gọi abort() khi một slot/timer ném exception Python chưa bắt (traceback chỉ in ra console nên bị mất).
+- `main.py`: `sys.excepthook` ghi traceback vào `logs/gui_errors.log`, app không tắt nữa. Áp dụng cả SortingStation
+  (trạm nạp main.py). Nguyên nhân gốc: chờ traceback đầu tiên trong log để sửa đúng chỗ.
+
+## 2026-11-25 — developer — Part bo góc ghép sọt fomex
+- Mới: `src/cad/tao_goc_sot_fomex.py` (OCC, tham số: dày fomex T, khe 0.4, thành 2.4, sâu rãnh 20).
+  Chạy `python src/cad/tao_goc_sot_fomex.py <T>` → `assets/sot_fomex/`: `goc_3_mat_fomex5mm.stl/.step` (góc đáy, 3 rãnh,
+  30.2 mm/cạnh), `nep_L_fomex5mm.stl/.step` (nẹp 2 rãnh 30.2×30.2×40), ảnh `xem_truoc_fomex5mm.png`.
+
+## 2026-11-25 — developer — Góc quây sọt (thay cho part bo góc fomex — người dùng làm rõ yêu cầu)
+- Mới: `src/cad/tao_goc_quay_sot.py` → `assets/goc_quay_sot/goc_quay_sot_A50_H50.stl/.step/_xem_truoc.png`:
+  cột góc chữ L (cánh 50 mm, cao 50, vách 3) + đế chìa ra ngoài 15 mm để dán xuống tấm bìa, 2 gân, 2 lỗ Ø3.5,
+  vát mép trên phía trong dẫn kiện. In 4 cái/sọt. Part `assets/sot_fomex/` (hiểu nhầm) để lại, chưa xóa.
+
+- 2026-11-25: đã xóa `assets/sot_fomex/` và `src/cad/tao_goc_sot_fomex.py` (người dùng đồng ý).

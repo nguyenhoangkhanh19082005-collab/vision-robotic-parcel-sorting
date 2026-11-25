@@ -35,8 +35,18 @@ class QrReader:
             if isinstance(configured, list) and configured
             else [self.settings.get("upscale", 2.0)]
         )
-        variant_index = 0
+        # Upscaling only helps small QR crops. A 2K frame upscaled 3x is 33 MP and made
+        # an unreadable frame cost ~5 s (2026-11-23); cap the upscaled size instead.
+        limit = float(self.settings.get("max_upscaled_pixels", 12e6))
+        area = float(image.shape[0] * image.shape[1])
+        capped = []
         for upscale in upscales:
+            value = min(float(upscale), (limit / max(area, 1.0)) ** 0.5)
+            value = 1.0 if value < 1.05 else value
+            if value not in capped:
+                capped.append(value)
+        variant_index = 0
+        for upscale in capped:
             variants = qr_variants(
                 image,
                 upscale=float(upscale),

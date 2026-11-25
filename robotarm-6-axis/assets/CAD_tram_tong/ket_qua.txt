@@ -1,0 +1,6 @@
+STEP: E:\UDMT\robotarm-6-axis\assets\CAD_tram_tong\Tram_phan_loai_tong.step (124.1 MB)
+Robot q = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] độ; 205 chi tiết
+Đèn ring: thang đo 2.125 mm/đv OBJ, tâm vòng (mm, base) = [220.  -27.5 275.2], cao hơn mặt băng 236 mm
+Webcam: tâm ống kính (mm, base) = [220.  -27.5 176.2], cao hơn mặt băng 137 mm
+Cảm biến M18: trục tại Y base = 75.6 mm, cao hơn mặt băng 32 mm
+Số khối: Robot_6_truc 205, Bang_tai 24, Thung_phan_loai 3, Kien_hang 1, Mat_ban 1, Gia_camera_den_cam_bien 7, Cam_bien 3, Den_ring 1, Webcam 1, Cum_giac_hut_bom_van 21

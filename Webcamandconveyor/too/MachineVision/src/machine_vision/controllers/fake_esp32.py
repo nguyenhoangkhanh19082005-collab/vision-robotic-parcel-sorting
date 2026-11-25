@@ -42,10 +42,12 @@ class FakeConveyorEsp32:
         self.count = 0
         self.sensor = False
         self.parcels: list[float] = []   # front positions
+        self.travel = 0.0                # total belt displacement (parcel id = centre - travel)
         self.commands: list[str] = []
         self.events: list[str] = []
         self._peer_ip: str | None = None
         self._autostop_at: float | None = None
+        self.autostopped = False         # firmware v2.1 STATUS ASTOP flag
         self._last_packet = time.monotonic()
         self._started = time.monotonic()
         self._lock = threading.Lock()
@@ -70,6 +72,24 @@ class FakeConveyorEsp32:
             for index in range(count):
                 self.parcels.append(first - index * gap)
 
+    def take_at_sensor(self) -> bool:
+        """Remove the parcel at the pick point (the robot lifted it).
+
+        That is the parcel covering the sensor or, with a delayed pick stop (firmware
+        v2.1), the one that has just passed it (the rearmost front past the sensor).
+        """
+        with self._lock:
+            past = [p for p in self.parcels if p >= self.sensor_position]
+            if not past:
+                return False
+            self.parcels.remove(min(past))
+            return True
+
+    def positions(self) -> list[float]:
+        """Parcel centres along the belt (same units as ``sensor_position``)."""
+        with self._lock:
+            return [p - self.parcel_length / 2 for p in self.parcels]
+
     # -- simulation ------------------------------------------------------------
     def _send_event(self, text: str) -> None:
         self.events.append(text)
@@ -78,7 +98,11 @@ class FakeConveyorEsp32:
 
     def _step(self, dt: float) -> None:
         now = time.monotonic()
+        if self.state == "REV":
+            self.travel -= self.belt_speed * dt
+            self.parcels = [p - self.belt_speed * dt for p in self.parcels]
         if self.state == "FWD":
+            self.travel += self.belt_speed * dt
             self.parcels = [p + self.belt_speed * dt for p in self.parcels]
             self.parcels = [
                 p for p in self.parcels if p - self.parcel_length < self.sensor_position + 1.0
@@ -90,13 +114,15 @@ class FakeConveyorEsp32:
             self.sensor = active
             if active:
                 self.count += 1
-                if self.auto and self.state == "FWD":
+                # Only the first parcel starts the countdown (firmware v2.1).
+                if self.auto and self.state == "FWD" and self._autostop_at is None:
                     self._autostop_at = now + self.delay_ms / 1000
             self._send_event(f"EVT:SENSOR:{int(active)}:{self.count}:{int((now - self._started) * 1000)}")
         if self._autostop_at is not None and now >= self._autostop_at:
             self._autostop_at = None
             if self.state == "FWD":
                 self.state, self.speed = "STOP", 0
+                self.autostopped = True
                 self._send_event(f"EVT:AUTOSTOP:{self.count}")
         if self.state != "STOP" and now - self._last_packet > self.WATCHDOG_S:
             self.state, self.speed = "STOP", 0
@@ -110,7 +136,7 @@ class FakeConveyorEsp32:
             return (
                 f"STATUS:{self.state}:{self.speed}:SENSOR={int(self.sensor)}:COUNT={self.count}"
                 f":AUTO={int(self.auto)}:DELAY={self.delay_ms}:ISR=0:ISL=0"
-                f":UP={int(time.monotonic() - self._started)}"
+                f":UP={int(time.monotonic() - self._started)}:ASTOP={int(self.autostopped)}"
             )
         if command == "RESETCOUNT":
             self.count = 0
@@ -127,8 +153,11 @@ class FakeConveyorEsp32:
             speed = int(value)
             if action != "STOP" and not 1 <= speed <= 255:
                 return "ERR:PWM_RANGE"
+            if action != "STOP":
+                self.autostopped = False
+            if action != "FWD":
+                self._autostop_at = None
             self.state, self.speed = action, (0 if action == "STOP" else speed)
-            self._autostop_at = None
             return f"ACK:{action}:{value} (State: {action} Speed: {self.speed})"
         return "ERR:UNKNOWN_COMMAND"
 

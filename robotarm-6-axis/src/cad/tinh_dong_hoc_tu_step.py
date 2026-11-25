@@ -32,6 +32,17 @@ MESH_ORIG = os.path.join(MESH_DIR, "goc_truoc_v3")      # mesh gốc (bầu dài
 BAU_S0, BAU_B, BAU_NEW = 154.5, 187.0, 16.5             # đoạn bầu AX-4_4: s 154.5..187 (dọc cẳng tay từ khuỷu) → 16.5 mm
 D_FUN = (BAU_B - BAU_S0) - BAU_NEW                      # 16.0 mm
 CUP_FROM_FACE = 129.0                                   # miệng giác (chưa nén) cách mặt ngoài mặt bích AX-6, gá dài
+ZERO_UPRIGHT = False                                    # tư thế 0: True = dựng thẳng đứng (22/11/2026), False = chữ L
+# 24/11/2026: tư thế 0 = CHỮ L, ĐẦU HÚT CHÚC XUỐNG (ảnh người dùng): cánh tay trên đứng, cẳng tay nằm ngang hướng ra
+# băng tải, cổ tay gập để trục J6 (đầu hút) chỉ thẳng xuống đất. Chỉ dùng khi ZERO_UPRIGHT = False.
+ZERO_TOOL_DOWN = True
+# 24/11/2026 (lần 3): tư thế HOME THẬT = chữ L ở trên + các góc lệch thêm dưới đây (độ, chiều dương twin).
+# Ảnh twin người dùng xác nhận khớp robot thật (J2 đứng thẳng lúc chụp): J3 25, J5 22, J6 −124 (J4 1° coi là 0).
+# Robot thật còn CÚI J2 VỀ TRƯỚC 10–15° → lấy 12.5° và GIỮ NGUYÊN hướng tuyệt đối của cẳng tay + đầu hút như ảnh
+# (cẳng tay chúc 25°, đầu hút nghiêng 3°): J3 tương đối = 25 − 12.5 = 12.5; J5 giữ 22 (đầu hút nghiêng = J2 + J3 − J5).
+# (Cộng thẳng J3 25 trên J2 12.5 sẽ đặt giác hút ở z 36 mm < mặt băng 39 mm → không thể là tư thế thật.)
+# Đo lại góc J2 thật (app thước đo độ điện thoại áp vào cánh tay trên); nếu khác, sửa a = J2 thật và J3 = 25 − a.
+HOME_EXTRA_DEG = [0.0, 12.5, 12.5, 0.0, 22.0, -124.0]
 LINKS = ["base_link", "link_1_1", "link_2_1", "link_3_1", "link_4_1", "link_5_1", "link_6_1"]
 REF_PARTS = [["AX-1_10__NAUO194", "AX-1_11__NAUO195"], ["AX-1_7__NAUO168", "AX-1_2__NAUO164"], ["AX-2_1__NAUO124", "AX-2_4__NAUO126"],
              ["AX-3_1__NAUO95", "AX-3_3__NAUO97"], ["AX-4_4__NAUO47", "AX-4_1__NAUO43"], ["AX-5_1__NAUO22", "AX-5_2__NAUO23"], ["AX-6__NAUO1"]]
@@ -146,21 +157,38 @@ def main():
         pts.append(o + ((old_moved - o) @ d) * d); axs.append(d)
         P(f"J{i+1}: điểm twin cũ cách trục STEP {res_old:5.1f} mm (sau khi dời theo mesh khâu {i+1}: {res_new:4.1f} mm); lệch hướng {np.degrees(np.arccos(min(1, abs(d @ OLD_A[i]/np.linalg.norm(OLD_A[i]))))):.2f}°")
 
-    # ---- 3. góc đưa tư thế CAD về chữ L chuẩn ----
+    # ---- 3. góc đưa tư thế CAD về tư thế 0 ----
+    # 22/11/2026: người dùng đặt tư thế 0 = DỰNG THẲNG ĐỨNG (cánh tay trên + cẳng tay + cổ tay cùng hướng lên trời,
+    # trục J6 song song trục J1). Trước đó là chữ L (cẳng tay nằm ngang). Khác biệt duy nhất: góc J3 (cẳng tay).
     up = axs[0]
     arm = pts[2] - pts[1]; arm = arm - (arm @ axs[1]) * axs[1]
     q0 = np.zeros(6)
     q0[1] = signed_angle(arm, up, axs[1])
     R = rot(axs[1], q0[1])
     fore = axs[3] * np.sign(axs[3] @ (pts[4] - pts[2]))       # hướng cẳng tay (khuỷu → cổ tay)
-    h = np.cross(axs[1], up); h = h * np.sign(h @ (R @ fore))  # phương ngang trong mặt phẳng tay, phía cẳng tay đang chỉ
+    if ZERO_UPRIGHT:
+        h = up                                                 # cẳng tay dựng thẳng lên theo trục J1
+    else:
+        h = np.cross(axs[1], up); h = h * np.sign(h @ (R @ fore))  # chữ L: phương ngang, phía cẳng tay đang chỉ
     q0[2] = signed_angle(fore, R.T @ h, axs[2])
     R = R @ rot(axs[2], q0[2])
     tgt = R.T @ axs[1]; tgt = tgt * np.sign(tgt @ axs[4])
     q0[3] = signed_angle(axs[4], tgt, axs[3])
     tool = axs[5] * np.sign(axs[5] @ fore)
-    q0[4] = signed_angle(tool, fore, axs[4])
-    P("Góc đưa tư thế CAD về chữ L chuẩn (độ, theo chiều dương twin): " + ", ".join(f"J{i+1} {np.degrees(q0[i]):+.2f}" for i in range(6)))
+    if not ZERO_UPRIGHT and ZERO_TOOL_DOWN:
+        R4 = R @ rot(axs[3], q0[3])                            # quay tích lũy J2..J4 (đổi hướng hệ CAD → tư thế mới)
+        q0[4] = signed_angle(tool, R4.T @ (-up), axs[4])       # trục J6 chỉ thẳng xuống
+    else:
+        q0[4] = signed_angle(tool, fore, axs[4])
+    if not ZERO_UPRIGHT and any(HOME_EXTRA_DEG):
+        # J2 "cúi về trước" = quay cánh tay trên về phía h (phía cẳng tay) → chọn dấu theo hình học, không đoán.
+        dj2 = np.radians(HOME_EXTRA_DEG[1])
+        s2 = 1.0 if (rot(axs[1], q0[1] + dj2) @ arm) @ h > (rot(axs[1], q0[1] - dj2) @ arm) @ h else -1.0
+        extra = np.radians(HOME_EXTRA_DEG); extra[1] *= s2
+        q0 = q0 + extra
+        P(f"Cộng thêm góc home thật (độ, chiều dương twin): " + ", ".join(f"J{i+1} {np.degrees(extra[i]):+.1f}" for i in range(6))
+          + f"  (J2 cúi về trước = chiều {'dương' if s2 > 0 else 'âm'} twin)")
+    P(f"Góc đưa tư thế CAD về tư thế 0 ({'dựng thẳng đứng' if ZERO_UPRIGHT else ('chữ L, đầu hút chúc xuống' if ZERO_TOOL_DOWN else 'chữ L')}) (độ, theo chiều dương twin): " + ", ".join(f"J{i+1} {np.degrees(q0[i]):+.2f}" for i in range(6)))
 
     # ---- 4. nướng tư thế 0 mới vào điểm/trục khớp và ma trận mesh ----
     T = np.eye(4); new_p, new_a, mesh_T = [], [], [np.eye(4)]
@@ -178,7 +206,7 @@ def main():
     L2 = np.linalg.norm(arm) * 1000
     rr = wc - new_p[2]; L3 = np.linalg.norm(rr - (rr @ new_a[2]) * new_a[2]) * 1000
     P(f"Tư thế 0 mới: cánh tay trên lệch phương đứng {np.degrees(np.arccos(np.clip(arm @ up / np.linalg.norm(arm), -1, 1))):.3f}°; "
-      f"trục J4 so với phương ngang {np.degrees(np.arcsin(abs(new_a[3] @ up))):.3f}°; J5∥J2 lệch {np.degrees(np.arccos(min(1, abs(new_a[4] @ new_a[1])))):.3f}°; "
+      f"trục J4 so với phương đứng {np.degrees(np.arccos(min(1, abs(new_a[3] @ up)))):.3f}°; J5∥J2 lệch {np.degrees(np.arccos(min(1, abs(new_a[4] @ new_a[1])))):.3f}°; "
       f"J6 so với J4 {np.degrees(np.arccos(min(1, abs(new_a[5] @ new_a[3])))):.3f}°")
     P(f"Kích thước: J2–J3 = {L2:.2f} mm; J3 → tâm cổ tay = {L3:.2f} mm; tâm cổ tay → điểm J6 = {np.linalg.norm(new_p[5] - wc)*1000:.2f} mm; "
       f"J2 cao hơn điểm J1 {((new_p[1] - new_p[0]) @ up)*1000:.2f} mm; lệch trục J4–J3 {abs((new_p[3]-new_p[2]) @ np.cross(new_a[2], new_a[3]))*1000:.3f} mm")
@@ -198,8 +226,11 @@ def main():
         fh.write('"""TỰ SINH bởi src/cad/tinh_dong_hoc_tu_step.py — KHÔNG sửa tay.\n'
                  "Hình học động học lấy từ trục khớp trong assets/CAD_lap_rap_v3/Roboter_v3_J4_cu_bau_ngan_giac_hut_dai.step (hệ mesh base_link, mét):\n"
                  "J1–J3 động cơ 1:27, J4 bản gốc, bầu AX-4_4 rút ngắn (J5, J6 lùi 16 mm), gá giác hút dài.\n"
-                 "Tư thế 0 = chữ L chuẩn: cánh tay trên dựng đứng (song song trục J1), cẳng tay nằm ngang, trục J5 song song trục J2,\n"
-                 'cổ tay thẳng (trục J6 trùng phương cẳng tay). Đặt robot thật đúng tư thế này rồi mới "Lưu Gốc".\n"""\n'
+                 + ("Tư thế 0 = DỰNG THẲNG ĐỨNG (22/11/2026): cánh tay trên, cẳng tay và trục J6 song song trục J1, hướng lên trời; trục J5 song song trục J2,\n"
+                    'cổ tay thẳng (trục J6 trùng phương cẳng tay). Đặt robot thật đúng tư thế này rồi mới "Lưu Gốc".\n' if ZERO_UPRIGHT else
+                    f"Tư thế 0 = HOME THẬT (24/11/2026): chữ L đầu hút chúc xuống + lệch thêm {HOME_EXTRA_DEG} độ (J1..J6; J2 cúi về trước),\n"
+                    'cẳng tay chúc xuống, cổ tay gập theo ảnh người dùng. Đặt robot thật đúng tư thế này rồi mới "Lưu Gốc".\n')
+                 + '"""\n'
                  "import numpy as np\n\n")
         fh.write("JOINT_POINTS = [\n" + "".join(f"    np.array([{p[0]:.7f}, {p[1]:.7f}, {p[2]:.7f}]),  # J{i+1}\n" for i, p in enumerate(new_p)) + "]\n\n")
         fh.write("JOINT_AXES = [\n" + "".join(f"    np.array([{a[0]:.8f}, {a[1]:.8f}, {a[2]:.8f}]),\n" for a in new_a) + "]\n\n")

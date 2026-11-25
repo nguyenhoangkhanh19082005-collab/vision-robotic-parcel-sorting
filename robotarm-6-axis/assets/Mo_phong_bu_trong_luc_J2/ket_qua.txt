@@ -1,0 +1,20 @@
+MÔ PHỎNG BÙ TRỌNG LỰC J2 — lò xo kéo + cáp qua ròng rọc (22/11/2026)
+Khối lượng giả định (thể tích mesh × 1.2 g/cm³, hệ số hiệu chỉnh 1.00):
+  link_2_1:    424 cm³ →  0.51 kg
+  link_3_1:    274 cm³ →  0.33 kg
+  link_4_1:    233 cm³ →  0.28 kg
+  link_5_1:    133 cm³ →  0.16 kg
+  link_6_1:     25 cm³ →  0.03 kg
+  tải đầu hút: 0.15 kg
+Mô-men trọng lực J2 lớn nhất (duỗi thẳng, tay ngang θ = 90°): 3.62 N·m
+  → KHÔNG lò xo: lực nhánh đai ≈ 142 N
+Ròng rọc A cao 90 mm trên trục J2, chốt B cách trục 120 mm, lệch bên 86 mm
+Lò xo: k = 0.27 N/mm, lực tối đa 45 N, hành trình 136 mm (θ −30…105°)
+θ (°)   τ trọng lực duỗi   τ lò xo   τ còn lại → lực đai   |  chữ L: τ trọng lực, còn lại
+   0      -0.00            -0.00    -0.00 →     0 N   |    1.78,   1.78 →   70 N
+  30       1.80            -1.44     0.36 →    14 N   |    2.46,   1.02 →   40 N
+  60       3.13            -2.50     0.63 →    25 N   |    2.49,  -0.01 →    0 N
+  90       3.62            -2.88     0.73 →    29 N   |    1.85,  -1.04 →   41 N
+ 105       3.50            -2.79     0.71 →    28 N   |    1.32,  -1.46 →   57 N
+Lực đai lớn nhất (duỗi) không lò xo 142 N → có lò xo 29 N
+Lực đai lớn nhất (chữ L) không lò xo 101 N → có lò xo 81 N

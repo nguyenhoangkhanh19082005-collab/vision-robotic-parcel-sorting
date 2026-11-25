@@ -7,6 +7,10 @@
 #include "soc/gpio_reg.h"
 
 // ================= CẤU HÌNH MẠNG ETHERNET W5500 =================
+// 24/11/2026: schematic Robotarm V1.0 (EasyEDA, 24/11/2026) KHÔNG có W5500; GPIO10, GPIO11 nối IN1, IN3 của module
+// L298N (bơm hút, van điện từ). SPI W5500 dùng đúng 2 chân này → TẮT Ethernet (USE_W5500 0), chỉ điều khiển qua USB.
+// Muốn dùng lại LAN phải dời bơm/van sang chân khác rồi đặt USE_W5500 1.
+#define USE_W5500 0
 #define W5500_CS_PIN 10
 #define SPI_MOSI_PIN 11
 #define SPI_MISO_PIN 12
@@ -67,33 +71,29 @@ uint16_t calc_crc16(const uint8_t *data, size_t len) {
 const uint8_t STEP_PINS[6] = {1, 4, 6, 15, 40, 38};
 const uint8_t DIR_PINS[6]  = {2, 5, 7, 16, 41, 39};
 
-// ================= PIN RELAY BƠM / VAN (ĐẦU HÚT CHÂN KHÔNG) =================
-// LƯU Ý PHẦN CỨNG: Bản gốc GitHub khai báo PIN 10, 11 bị trùng trực tiếp với
-// W5500_CS_PIN (10) và SPI_MOSI_PIN (11) của chip mạng Ethernet W5500.
-// Bạn có thể chọn 1 trong 3 phương án đấu nối sau tùy theo mạch thực tế đã hàn:
-//
-// PHƯƠNG ÁN 1 (Mặc định khuyến nghị): Dùng 2 chân IO tự do ngoài rìa header (PIN 21, 47)
-#define PUMP_PIN 21
-#define VALVE_PIN 47
-//
-// PHƯƠNG ÁN 2 (Nếu mạch đã hàn kín 100% không còn chân trống):
-// Tận dụng 2 chân UART của cụm TMC2209 J4-J6 (chân 8 và 9). TMC2209 chạy chế độ Standalone.
-// #define PUMP_PIN 8
-// #define VALVE_PIN 9
-//
-// PHƯƠNG ÁN 3 (Nếu hiện tại chỉ cần chạy cánh tay 6 trục, chưa lắp đầu hút chân không):
-// Đặt -1 để vô hiệu hóa rơ-le, bảo đảm W5500 và 6 động cơ hoạt động trơn tru 100%.
-// #define PUMP_PIN -1
-// #define VALVE_PIN -1
-
-#define RELAY_ON LOW
-#define RELAY_OFF HIGH
+// ================= BƠM HÚT / VAN ĐIỆN TỪ QUA MODULE L298N (24/11/2026, theo schematic) =================
+// L298N U8: OUT1/OUT2 → bơm chân không (BOM+/BOM−), OUT3/OUT4 → van điện từ (VAN+/VAN−), nguồn +12V.
+//   IN1 = GPIO10 (bơm), IN2 = GND;  IN3 = GPIO11 (van), IN4 = GND;  ENA/ENB giữ jumper trên module (luôn bật).
+//   → mức CAO = cấp điện (khác rơ-le cũ kích mức THẤP). Không có W5500 trên mạch (xem USE_W5500).
+// Logic hút (van 3 ngã thường đóng phía khí trời — loại hay đi kèm bơm hút):
+//   HÚT  : van TẮT (giác hút thông bơm) → bơm CHẠY.
+//   NHẢ  : bơm TẮT → van MỞ ra khí trời VALVE_RELEASE_MS rồi tự TẮT hết (cuộn van không bị nóng, kiện rơi hẳn).
+//   TẮT  : bơm + van tắt.
+// Nếu van của bạn là loại thường đóng nằm GIỮA bơm và giác hút (phải cấp điện mới hút) → đặt VALVE_OPEN_WHEN_SUCK 1.
+#define PUMP_PIN 10
+#define VALVE_PIN 11
+#define OUT_ON  HIGH
+#define OUT_OFF LOW
+#define VALVE_OPEN_WHEN_SUCK 0
+const uint32_t VALVE_RELEASE_MS = 600;   // thời gian mở van xả chân không khi NHẢ
 
 #define TOOL_OFF 0
 #define TOOL_SUCK 1
 #define TOOL_RELEASE 2
 
-uint8_t current_tool_state = TOOL_OFF;
+uint8_t current_tool_state = TOOL_OFF;   // trạng thái thật của bơm/van (gửi về GUI qua telemetry)
+uint8_t last_cmd_tool = 255;             // lệnh cuối nhận được — gói MOVE lặp cùng lệnh không kích lại xung xả
+uint32_t release_t0 = 0;
 
 // ================= THÔNG SỐ ĐỘNG CƠ & HỘP SỐ =================
 // 06/11/2026: J1–J3 thay 42STH38-1684A + hộp số hành tinh 1:27 (5400 xung đủ/vòng trục ra). Đã giảm tốc rất
@@ -132,14 +132,71 @@ const float STEPS_PER_REV = 200.0;
 // 19/11/2026 — J4 TRỞ LẠI ĐỘNG CƠ CŨ 17HS13-0404S-PG5 (người dùng bỏ phương án 17PM). 400 mA = 100 % định mức
 //   (0.4 A, 27 Ω). KHÔNG đặt cao hơn: 27 Ω × đỉnh 0.57 A = 15.4 V đã chiếm 2/3 nguồn 24 V, dòng cao hơn driver cũng
 //   không đẩy nổi khi quay nhanh, chỉ làm nóng động cơ.
-const uint16_t MOTOR_CURRENTS[6] = {1500, 1770, 1770, 400, 900, 900};
+//
+// 21/11/2026 — J2 HẠ DÒNG ĐỂ BẢO VỆ ĐAI 2GT-6 mm (đai 240 đứt khi J3–J6 duỗi thẳng và J2 nâng từ dưới đất lên).
+//   Đai J2 nằm SAU hộp số 1:27 → lực đai = mô-men trục hộp số / bán kính bước puly 20T (12.73/2 = 6.37 mm).
+//   1770 mA: 0.36 N·m × 1.05 × 27 × 0.8 (hiệu suất hộp số) ≈ 8.2 N·m → ≈ 1280 N trên nhánh căng, gấp nhiều lần sức
+//   chịu của đai cao su 6 mm. Khi khớp bị kẹt / chạm đất / đổi chiều đột ngột, toàn bộ lực này dồn vào đai.
+//   Lực đai tối đa ≈ 0.72 N/mA × dòng RMS (đặt 1200 mA ≈ 870 N; 900 mA ≈ 650 N).
+//   1200 mA làm mặc định (≈ 68 % mô-men cũ). Dòng J2 chỉnh được khi đang chạy: $I 2 <mA>, lưu bằng $S.
+//   Cách chỉnh: duỗi thẳng J3–J6, nâng J2 thật chậm, dò dòng THẤP NHẤT mà J2 vẫn nâng được ở tư thế xấu nhất,
+//   rồi cộng thêm 15–20 % dự phòng. Nếu cần > 1400 mA mới nâng nổi thì tải trọng lực đã vượt sức đai → phải bù trọng
+//   lực bằng lò xo hoặc đổi đai lõi thép rộng hơn; firmware không thể làm đai khỏe hơn.
+// 23/11/2026 — LẮP LẠI ĐAI 240-2GT-6 (đã căng lại). Đai này từng đứt ở 1770 mA (≈ 1280 N) → giới hạn lực đai THEO DÒNG:
+//   Mô-men trọng lực J2 xấu nhất (J3–J6 duỗi ngang, ước tính từ CAD) ≈ 3.6 N·m ÷ bán kính puly 80T 25.5 mm ≈ 141 N
+//   ≈ 196 mA. Đặt 500 mA → lực đai tối đa ≈ 360 N (gấp 2.5 lần cần thiết, = 28 % lực lúc đai đứt). Giữ 0.8 × 500 =
+//   400 mA ≈ 290 N > 141 N nên vẫn giữ được tay duỗi ngang. Kẹt/chạm vật: động cơ TRƯỢT BƯỚC trước khi đai chịu quá 360 N.
+//   Trần cứng J2_CURRENT_MAX_MA = 700 mA (≈ 500 N): $I 2 không vượt được, dòng cũ lưu Flash cao hơn bị bỏ.
+//   Nếu J2 trượt bước khi nâng tay duỗi thẳng: tăng từng nấc 50 mA ($I 2 550, $I 2 600 …), tối đa 700.
+// 23/11/2026 — J5 900 → 1200 mA (người dùng: nhiều lúc không nâng nổi đầu hút). Mô-men +33 %. Mã cuộn 17PM-K4xx chưa
+//   rõ: nếu là bản 0.9 A thì 1200 mA = 133 % định mức khi CHẠY → động cơ ấm hơn; dòng GIỮ hạ còn 0.7 × 1200 = 840 mA
+//   (≤ 0.9 A) để đứng yên lâu không quá nhiệt. Đo 1 cuộn ≈ 2.4 Ω (bản 1.5 A) thì nâng được tới 1400: $I 5 1400, $S.
+//   Dòng J5 cũ lưu Flash thấp hơn 1200 (900 của bản trước) tự nâng lên 1200 khi khởi động.
+// 24/11/2026 — J5 1200 → 1400 mA (người dùng: J5 vẫn không nâng được J6 + đầu hút ở tư thế 0 mới, cổ tay gập 90°).
+//   1400 mA = trần an toàn cho bản cuộn 1.5 A/2.4 Ω (93 %). Nếu đo 1 cuộn J5 ≈ 5.6 Ω (bản 0.9 A) thì 1400 = 155 %:
+//   động cơ nóng nhanh → hạ về $I 5 1000, $S. Dòng giữ 0.7 × 1400 = 980 mA. Tốc độ J5 hạ còn 45 °/s (xem JOINT_SPEED_DEG)
+//   để giữ mô-men chạy gần mô-men giữ.
+const uint16_t MOTOR_CURRENTS[6] = {1500, 500, 1770, 400, 1400, 900};
+const uint16_t CURRENT_MIN_MA = 300;    // giới hạn cho lệnh $I
+const uint16_t CURRENT_MAX_MA = 1770;   // nấc CS=31 của module (Rsense 0.11 Ω)
+const uint16_t J2_CURRENT_MAX_MA = 700; // trần riêng J2 bảo vệ đai 240-2GT-6 (≈ 500 N)
+uint16_t motor_current[6];              // dòng chạy đang dùng (mA RMS); mặc định = MOTOR_CURRENTS, đổi bằng $I
+
+// 22/11/2026 — KHÓA J2 BẰNG ĐIỆN (động cơ J2 vẫn cấp dòng, giữ cứng tại một góc; chỉ dùng J1, J3–J6 để gắp).
+//   Khi khóa, đích của J2 LUÔN là góc khóa, bất kể lệnh từ PC (slider, HOME, điểm dạy, IK) hay chế độ AUTO.
+//   J2 đứng yên → đai chỉ chịu tải trọng lực tĩnh, không còn lực tăng tốc/giật khi nâng hạ tay.
+//   Lệnh USB: $J <độ> đưa J2 tới góc đó (chậm, theo giới hạn 20 °/s) rồi khóa | $J khóa tại góc HIỆN TẠI
+//             $J U mở khóa | $S lưu Flash (khóa còn sau khi khởi động lại).
+// 24/11/2026 — KHÓA CỨNG J2 TRONG FIRMWARE (người dùng yêu cầu): J2 luôn khóa ở 0° = góc J2 của tư thế HOME THẬT
+//   (lần 3: cánh tay trên CÚI VỀ TRƯỚC ≈12.5° so với đứng thẳng — "Lưu Gốc" đúng tư thế đó). Cánh tay trên đứng thẳng → mô-men trọng lực lên đai J2 gần 0. $J / $J U / $R / Flash
+//   không mở khóa được. Muốn mở lại: đặt J2_HARD_LOCK 0 rồi nạp lại.
+#define J2_HARD_LOCK 1
+const float J2_HARD_LOCK_DEG = 0.0f;
+bool j2_locked = J2_HARD_LOCK;
+float j2_lock_deg = J2_HARD_LOCK_DEG;
+// 24/11/2026 — GIỚI HẠN MỀM J3 (độ, quy ước HOME THẬT lần 3: 0 = cẳng tay chúc 25° dưới phương ngang, + = chúc thêm).
+//   Lần 3: [-225, 45] → [-220, 20] (quét va chạm mesh cẳng tay ↔ cánh tay trên, dời theo home mới).
+//   Firmware kẹp mọi lệnh J3 (PC, AUTO, điểm dạy) vào khoảng này. Đồng bộ với donghoc.joint_limits + slider GUI.
+const float J3_MIN_DEG = -220.0f;
+const float J3_MAX_DEG = 20.0f;
 // Tỉ lệ dòng GIỮ (đứng yên) so với dòng chạy. Thư viện TMCStepper mặc định 0.5 → khớp chịu trọng lực chỉ còn
 // một nửa mô-men khi dừng (tay tự tụt). J2, J3, J5 nâng tải nên giữ 0.7–0.8; J1, J6 không chịu trọng lực: 0.5.
 // Nhiệt động cơ khi giữ ∝ I²: J2/J3 giữ 1.05 A ≈ 39 % tổn hao định mức (tăng nhiệt ≈ 30 °C) — chịu được với nhựa in.
 // 15/11/2026: J2, J3 giữ 0.8 × 1.77 A = 1.42 A (trước 1.05 A, +35 % mô-men giữ). Không để 1.0 vì đứng yên lâu ở
 // 100 % dòng làm vỏ động cơ lên 80–90 °C, mềm chi tiết PLA kẹp động cơ.
 // 19/11/2026: J4 về động cơ cũ có hộp số 5.18 (hộp số tự giữ tốt) → giữ 0.7 như trước.
-const float HOLD_MULT[6] = {0.5, 0.8, 0.8, 0.7, 0.8, 0.5};
+// 23/11/2026: J5 0.8 → 0.7 (dòng chạy lên 1200 mA, giữ 840 mA ≤ định mức bản cuộn 0.9 A).
+// 24/11/2026 — KHÓA J4, J5, J6 SAU MỖI LỆNH (người dùng yêu cầu: dây bơm hút kéo xoay cổ tay khi đứng yên).
+//   Driver luôn bật (EN = LOW), nhưng trước đây khi đứng yên dòng hạ còn 70 % (J4, J5) và 50 % (J6) → mô-men giữ yếu, J6
+//   (1:1, không hộp số) bị dây kéo xoay mất bước. Nay J4–J6 giữ 100 % dòng chạy khi đứng yên = mô-men giữ tối đa
+//   (J6 gấp 2 lần, J4/J5 gấp 1.43 lần). Đổi lại động cơ cổ tay nóng hơn khi chờ: sờ vỏ sau 10 phút, > 70 °C thì đặt
+//   WRIST_HOLD_LOCK 0 hoặc hạ dòng chạy khớp đó bằng $I. Dòng giữ = dòng chạy, nên $I cũng đổi luôn dòng giữ.
+#define WRIST_HOLD_LOCK 1
+#if WRIST_HOLD_LOCK
+const float HOLD_MULT[6] = {0.5, 0.8, 0.8, 1.0, 1.0, 1.0};
+#else
+const float HOLD_MULT[6] = {0.5, 0.8, 0.8, 0.7, 0.7, 0.5};
+#endif
 // Tỉ số truyền tổng = hộp số × đai (06/11/2026):
 //   J1: 27 × đai 20T→60T (3.0) = 81      J2: 27 × đai 20T→80T (4.0) = 108     J3: 27 × đai 20T→60T (3.0) = 81
 //   J4: PG5 5.18 (trực tiếp)              J5: đai 2.5 (đo thực tế 10/2026)    J6: 1:1
@@ -152,7 +209,10 @@ const float GEAR_RATIOS[6] = {81.0, 108.0, 81.0, 5.181818, 2.5, 1.0};
 // 04/11/2026: J3 = -1.0 — người dùng quan sát J3 thật quay NGƯỢC chiều J3 trên digital twin khi lệnh góc dương.
 // Dấu nằm trong steps_per_degree nên góc telemetry (Act) vẫn cùng dấu với lệnh.
 // 15/11/2026: J3 về +1.0 — sau khi thay động cơ mới (màu dây/cặp cuộn khác động cơ cũ) người dùng báo J3 lại ngược twin.
-const float DIR_SIGNS[6] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+// 22/11/2026: tư thế 0 dựng thẳng đứng — người dùng đối chiếu twin: J1, J3, J4, J5 quay NGƯỢC (lệnh − ra +), J2, J6 đúng.
+// → đảo J1, J3, J4, J5. Chiều đã lưu Flash ($S) cũng được đảo đúng 1 lần khi khởi động (khóa NVS "dir22").
+const float DIR_SIGNS[6] = {-1.0, 1.0, -1.0, -1.0, -1.0, 1.0};
+const bool DIR_FLIP_22[6] = {true, false, true, true, true, false};
 float steps_per_degree[6];
 // GEAR_RATIOS / DIR_SIGNS ở trên là MẶC ĐỊNH. Giá trị đang dùng nằm trong gear_ratio[] / dir_sign[], có thể hiệu chỉnh
 // khi đang chạy bằng lệnh chữ qua USB (không cần nạp lại) và lưu Flash NVS — xem handleCalLine():
@@ -189,8 +249,12 @@ const uint32_t JOINT_MAX_SPEED[6] = {4800, 3200, 3200, 2000, 2200, 3000};
 //   + sức phản điện ≈ 5 V ≈ 23 V → vẫn đẩy gần đủ dòng ở 78 v/ph; nhanh hơn nữa mô-men tụt nhanh (≈ 60 % ở 120 v/ph).
 //   Mô-men chạy khớp ≈ 0.82 N·m, cần tối đa 0.39 N·m (J5 gập 90°, tải 200 g) → còn dư ở 90 °/s.
 //   Nếu J4 kêu/mất bước khi mang tải: hạ JOINT_SPEED_DEG[3] về 70.
-const float JOINT_SPEED_DEG[6] = {0, 30.0, 40.0, 90.0, 0, 0};
-const float JOINT_ACCEL_DEG[6] = {0, 60.0, 60.0, 180.0, 0, 0};
+// 21/11/2026: J2 bảo vệ đai — 30 → 20 °/s, gia tốc 60 → 20 °/s² (đạt tốc độ sau 1 s). Lực quán tính khi khởi động,
+//   dừng, đổi chiều giảm 3 lần; cụm J3–J6 duỗi thẳng có mô-men quán tính lớn nhất nên đây là lúc đai bị giật mạnh nhất.
+// 24/11/2026: J5 đặt theo độ: 45 °/s, gia tốc 90 °/s² (trước 2200 xung/s ≈ 99 °/s, 1000 xung/s² ≈ 45 °/s²). Chậm hơn →
+//   động cơ quay 0.31 v/s, mô-men gần bằng mô-men giữ; gia tốc vừa đủ để không giật khi nhấc đầu hút.
+const float JOINT_SPEED_DEG[6] = {0, 20.0, 40.0, 90.0, 45.0, 0};
+const float JOINT_ACCEL_DEG[6] = {0, 20.0, 60.0, 180.0, 90.0, 0};
 uint32_t joint_max_speed[6];   // xung/s đang dùng
 uint32_t joint_max_accel[6];   // xung/s² đang dùng
 
@@ -450,8 +514,8 @@ void configureDriver(int i) {
   // GCONF.i_scale_analog mặc định = 1: dòng bị nhân thêm (VREF/2.5 V) theo BIẾN TRỞ trên module → dòng thật
   // thấp hơn giá trị đặt qua UART (biến trở ở giữa ≈ một nửa). Tắt đi để dòng chỉ do firmware quyết định.
   drivers[i]->I_scale_analog(false);
-  drivers[i]->rms_current(MOTOR_CURRENTS[i], HOLD_MULT[i]);
-  drivers[i]->iholddelay(4);    // hạ dòng từ chạy → giữ từ từ (tránh giật khi vừa dừng)
+  drivers[i]->rms_current(motor_current[i], HOLD_MULT[i]);
+  drivers[i]->iholddelay(4);   // hạ dòng từ chạy → giữ từ từ (tránh giật khi vừa dừng)
   drivers[i]->TPOWERDOWN(40);   // chờ ≈ 0.9 s sau khi dừng mới hạ về dòng giữ
   drivers[i]->microsteps(MICROSTEPS_J[i]);
   drivers[i]->mstep_reg_select(true);
@@ -524,6 +588,7 @@ void setup() {
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW);
 
+#if USE_W5500
   // Khởi tạo SPI & Ethernet W5500 (Kiểm tra an toàn nếu có cắm module phần cứng)
   SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, W5500_CS_PIN);
   Ethernet.init(W5500_CS_PIN);
@@ -539,6 +604,9 @@ void setup() {
   } else {
     Serial.println("Chay che do USB Serial Type-C thuan (Khong phat hien W5500 SPI).");
   }
+#else
+  Serial.println("Ethernet W5500 TAT (GPIO10/11 dung cho bom/van L298N). Dieu khien qua USB Serial.");
+#endif
 
   loadFromFlash();
 
@@ -590,21 +658,36 @@ void setup() {
 }
 
 void executeTool(uint8_t state) {
-  current_tool_state = state;
+  if (state > TOOL_RELEASE) return;
+  if (state == last_cmd_tool) return;      // gói MOVE_PC mang lại cùng trạng thái dụng cụ → không làm gì
+  last_cmd_tool = state;
 #if (PUMP_PIN >= 0) && (VALVE_PIN >= 0)
   if (state == TOOL_SUCK) {
-    digitalWrite(VALVE_PIN, RELAY_OFF);
-    delay(50);
-    digitalWrite(PUMP_PIN, RELAY_ON);
+    digitalWrite(VALVE_PIN, VALVE_OPEN_WHEN_SUCK ? OUT_ON : OUT_OFF);
+    delay(20);
+    digitalWrite(PUMP_PIN, OUT_ON);
   } else if (state == TOOL_RELEASE) {
-    digitalWrite(PUMP_PIN, RELAY_OFF);
-    delay(50);
-    digitalWrite(VALVE_PIN, RELAY_ON);
+    digitalWrite(PUMP_PIN, OUT_OFF);
+    delay(20);
+    digitalWrite(VALVE_PIN, OUT_ON);       // xả chân không ra khí trời
+    release_t0 = millis();
   } else {
-    digitalWrite(PUMP_PIN, RELAY_OFF);
-    digitalWrite(VALVE_PIN, RELAY_OFF);
+    digitalWrite(PUMP_PIN, OUT_OFF);
+    digitalWrite(VALVE_PIN, OUT_OFF);
   }
 #endif
+  current_tool_state = state;
+}
+
+// Gọi trong loop(): hết VALVE_RELEASE_MS thì đóng van, báo trạng thái TẮT
+void serviceToolTimer() {
+  if (current_tool_state == TOOL_RELEASE && millis() - release_t0 >= VALVE_RELEASE_MS) {
+#if (PUMP_PIN >= 0) && (VALVE_PIN >= 0)
+    digitalWrite(PUMP_PIN, OUT_OFF);
+    digitalWrite(VALVE_PIN, OUT_OFF);
+#endif
+    current_tool_state = TOOL_OFF;
+  }
 }
 
 // ================= HIỆU CHỈNH TỈ SỐ TRUYỀN / CHIỀU QUAY KHI ĐANG CHẠY (15/11/2026) =================
@@ -612,6 +695,10 @@ void printCal() {
   Serial.printf("[CAL] ratio=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f sign=%.0f,%.0f,%.0f,%.0f,%.0f,%.0f\n",
                 gear_ratio[0], gear_ratio[1], gear_ratio[2], gear_ratio[3], gear_ratio[4], gear_ratio[5],
                 dir_sign[0], dir_sign[1], dir_sign[2], dir_sign[3], dir_sign[4], dir_sign[5]);
+  Serial.printf("[CAL] dong_mA=%u,%u,%u,%u,%u,%u (J2 luc dai toi da ~%.0f N)\n", motor_current[0], motor_current[1],
+                motor_current[2], motor_current[3], motor_current[4], motor_current[5], 0.72f * motor_current[1]);
+  if (j2_locked) Serial.printf("[CAL] J2 KHOA o %.2f do (dong co giu cung)\n", j2_lock_deg);
+  else Serial.println("[CAL] J2 khong khoa");
 }
 
 // Đổi tỉ số/chiều của khớp i: dừng khớp, giữ nguyên GÓC đang báo (đổi lại số bước tương ứng).
@@ -627,30 +714,79 @@ void applyCal(int i, float ratio, float sign) {
   target_angles[i] = angle;
 }
 
+// Khóa J2: đích J2 = góc khóa (chỉ phát xung nếu J2 chưa ở đó). Các khớp khác giữ đích hiện tại.
+void applyJ2Lock() {
+  target_angles[1] = j2_lock_deg;
+  new_command = true;   // MotorTask gọi moveSynchronized → J2 đi tới góc khóa với tốc độ/gia tốc J2
+}
+
 void handleCalLine(const char *line) {
   int j = 0;
   float val = 0;
   char c = line[0];
-  if (c == 'P') {
+  if (c == 'J' && J2_HARD_LOCK) {
+    Serial.printf("[CAL] J2 KHOA CUNG trong firmware o %.1f do (J2_HARD_LOCK) - $J bi bo qua\n", J2_HARD_LOCK_DEG);
+    return;
+  } else if (c == 'J') {
+    // $J <độ> khóa J2 tại góc đó | $J khóa tại góc hiện tại | $J U mở khóa
+    const char *arg = line + 1;
+    while (*arg == ' ') arg++;
+    if (*arg == 'U' || *arg == 'u') {
+      j2_locked = false;
+      Serial.println("[CAL] J2 DA MO KHOA: J2 nhan lenh tu PC tro lai. Go $S de luu.");
+    } else if (*arg == 0 || (sscanf(arg, "%f", &val) == 1 && val >= -90.0f && val <= 110.0f)) {
+      if (*arg == 0) val = (float)steppers[1]->getCurrentPosition() / steps_per_degree[1];
+      j2_locked = true;
+      j2_lock_deg = val;
+      applyJ2Lock();
+      Serial.printf("[CAL] J2 DA KHOA o %.2f do: dong co giu cung, bo qua moi lenh J2. Go $S de luu.\n", val);
+    } else {
+      Serial.println("[CAL] LOI: $J <do -90..110> | $J | $J U");
+      return;
+    }
+  } else if (c == 'P') {
   } else if ((c == 'K' || c == 'D') && sscanf(line + 1, "%d %f", &j, &val) == 2 && j >= 1 && j <= 6) {
     if (c == 'K' && val >= 0.2f && val <= 500.0f) applyCal(j - 1, val, dir_sign[j - 1]);
     else if (c == 'D' && (val == 1.0f || val == -1.0f)) applyCal(j - 1, gear_ratio[j - 1], val);
     else { Serial.println("[CAL] LOI: gia tri ngoai khoang"); return; }
+  } else if (c == 'I' && sscanf(line + 1, "%d %f", &j, &val) == 2 && j >= 1 && j <= 6) {
+    // $I <khớp> <mA>: đổi dòng chạy ngay (dòng giữ theo HOLD_MULT), áp dụng tức thì qua UART
+    if (val < CURRENT_MIN_MA || val > CURRENT_MAX_MA) {
+      Serial.printf("[CAL] LOI: dong %u..%u mA\n", CURRENT_MIN_MA, CURRENT_MAX_MA);
+      return;
+    }
+    if (j == 2 && val > J2_CURRENT_MAX_MA) {
+      Serial.printf("[CAL] LOI: J2 toi da %u mA (bao ve dai 240-2GT-6, luc dai ~%.0f N)\n", J2_CURRENT_MAX_MA,
+                    0.72f * J2_CURRENT_MAX_MA);
+      return;
+    }
+    motor_current[j - 1] = (uint16_t)val;
+    drivers[j - 1]->rms_current(motor_current[j - 1], HOLD_MULT[j - 1]);
   } else if (c == 'S') {
     float cal[12];
     for (int i = 0; i < 6; i++) { cal[i] = gear_ratio[i]; cal[6 + i] = dir_sign[i]; }
     preferences.begin("robot_arm", false);
     preferences.putBytes("cal_v1", cal, sizeof(cal));
+    preferences.putBytes("cur_v1", motor_current, sizeof(motor_current));
+    preferences.putFloat("j2lock", j2_locked ? j2_lock_deg : NAN);
     preferences.end();
     Serial.println("[CAL] DA LUU vao Flash NVS");
   } else if (c == 'R') {
     preferences.begin("robot_arm", false);
     preferences.remove("cal_v1");
+    preferences.remove("cur_v1");
+    preferences.remove("j2lock");   // $R cũng mở khóa J2
     preferences.end();
-    for (int i = 0; i < 6; i++) applyCal(i, GEAR_RATIOS[i], DIR_SIGNS[i]);
+    j2_locked = J2_HARD_LOCK;   // khóa cứng không bị $R gỡ
+    j2_lock_deg = J2_HARD_LOCK_DEG;
+    for (int i = 0; i < 6; i++) {
+      applyCal(i, GEAR_RATIOS[i], DIR_SIGNS[i]);
+      motor_current[i] = MOTOR_CURRENTS[i];
+      drivers[i]->rms_current(motor_current[i], HOLD_MULT[i]);
+    }
     Serial.println("[CAL] Da xoa hieu chinh, ve mac dinh trong firmware");
   } else {
-    Serial.println("[CAL] LOI: lenh khong hop le ($P, $K j ratio, $D j sign, $S, $R)");
+    Serial.println("[CAL] LOI: lenh khong hop le ($P, $K j ratio, $D j sign, $I j mA, $J do|U, $S, $R)");
     return;
   }
   printCal();
@@ -725,6 +861,8 @@ void processRobotCommand(const RobotCommandPacket& rx_packet) {
     saveZeroCalibrationToFlash(); // Lưu vĩnh viễn vào Flash NVS
     last_feedback_time = 0; // Kích hoạt gửi phản hồi Act: 0.0° ngay lập tức cho GUI
     Serial.println(">> ZERO CALIBRATION OK: Tat ca 6 truc da duoc reset ve goc 0.0 do va luu Flash NVS!");
+    // 22/11/2026: tư thế 0 = DỰNG THẲNG ĐỨNG (cánh tay trên + cẳng tay + trục J6 hướng lên trời) — khớp digital twin.
+    Serial.println("   (Tu the 0 = DUNG THANG DUNG: canh tay tren, cang tay, truc J6 cung huong len troi.)");
   }
 }
 
@@ -827,6 +965,8 @@ void loop() {
     }
   }
 
+  serviceToolTimer();
+
   // --- 3. GỬI PHẢN HỒI ĐỊNH KỲ (MỖI 33ms ~ 30Hz) CHO CẢ 2 KÊNH ---
   if (millis() - last_feedback_time > 33) {
     RobotFeedbackPacket packet = buildFeedbackPacket();
@@ -875,7 +1015,10 @@ void moveSynchronized(float target_ang[6]) {
 
   for (int i = 0; i < 6; i++) {
     if (!steppers[i]) continue;
-    target_steps[i] = (int32_t)round(target_ang[i] * steps_per_degree[i]);
+    // J2 khóa: thay góc lệnh bằng góc khóa (lệnh J2 từ PC/AUTO bị bỏ qua)
+    float ang = (j2_locked && i == 1) ? j2_lock_deg : target_ang[i];
+    if (i == 2) ang = constrain(ang, J3_MIN_DEG, J3_MAX_DEG);   // giới hạn mềm J3 (24/11/2026)
+    target_steps[i] = (int32_t)round(ang * steps_per_degree[i]);
     delta_steps[i] = abs(target_steps[i] - steppers[i]->getCurrentPosition());
     
     // Dải chết thích ứng (Adaptive Deadband):
@@ -989,7 +1132,49 @@ void loadFromFlash() {
     if (ok) {
       for (int i = 0; i < 6; i++) { gear_ratio[i] = cal[i]; dir_sign[i] = cal[6 + i]; }
       Serial.println(">> FLASH NVS: Dung ti so truyen / chieu quay DA HIEU CHINH (lenh $P de xem, $R de xoa).");
+      // 22/11/2026: chiều lưu trong Flash là chiều cũ (ngược twin ở J1, J3, J4, J5) → đảo 1 lần rồi ghi lại.
+      if (!preferences.getBool("dir22", false)) {
+        for (int i = 0; i < 6; i++) if (DIR_FLIP_22[i]) dir_sign[i] = -dir_sign[i];
+        for (int i = 0; i < 6; i++) cal[6 + i] = dir_sign[i];
+        preferences.putBytes("cal_v1", cal, sizeof(cal));
+        Serial.println(">> FLASH NVS: Da DAO CHIEU J1, J3, J4, J5 trong hieu chinh da luu (1 lan, 22/11/2026).");
+      }
     }
+  }
+  preferences.putBool("dir22", true);
+  // 21/11/2026: dòng chạy đã chỉnh bằng $I + $S. Dòng J2 lưu cũ > mặc định (ví dụ 1770 trước khi đổi) vẫn được
+  // dùng — muốn về mặc định bảo vệ đai thì gõ $I 2 1200 rồi $S, hoặc $R.
+  for (int i = 0; i < 6; i++) motor_current[i] = MOTOR_CURRENTS[i];
+  uint16_t cur[6];
+  if (preferences.getBytes("cur_v1", cur, sizeof(cur)) == sizeof(cur)) {
+    bool ok = true;
+    for (int i = 0; i < 6; i++) ok = ok && cur[i] >= CURRENT_MIN_MA && cur[i] <= CURRENT_MAX_MA;
+    if (ok) {
+      for (int i = 0; i < 6; i++) motor_current[i] = cur[i];
+      Serial.printf(">> FLASH NVS: Dung dong da chinh, J2 = %u mA ($P de xem).\n", motor_current[1]);
+    }
+  }
+  // 23–24/11/2026: J5 lên 1400 mA — dòng cũ lưu Flash thấp hơn (900/1200) không đủ nâng đầu hút → dùng mặc định mới
+  if (motor_current[4] < MOTOR_CURRENTS[4]) {
+    Serial.printf(">> J5: dong luu %u mA < %u mA -> dung %u mA (nang dau hut). Go $S de luu.\n",
+                  motor_current[4], MOTOR_CURRENTS[4], MOTOR_CURRENTS[4]);
+    motor_current[4] = MOTOR_CURRENTS[4];
+  }
+  // 23/11/2026: đai 240 — dòng J2 lưu Flash vượt trần (vd 1200/1770 của bản cũ) → về mặc định bảo vệ đai
+  if (motor_current[1] > J2_CURRENT_MAX_MA) {
+    Serial.printf(">> J2: dong luu %u mA > tran %u mA (dai 240) -> dung %u mA. Go $S de luu.\n",
+                  motor_current[1], J2_CURRENT_MAX_MA, MOTOR_CURRENTS[1]);
+    motor_current[1] = MOTOR_CURRENTS[1];
+  }
+  float lock = preferences.getFloat("j2lock", NAN);
+  if (J2_HARD_LOCK) {
+    j2_locked = true;
+    j2_lock_deg = J2_HARD_LOCK_DEG;
+    Serial.printf(">> J2 KHOA CUNG o %.1f do (firmware 24/11/2026). Lenh J2 tu PC bi bo qua.\n", J2_HARD_LOCK_DEG);
+  } else if (!isnan(lock) && lock >= -90.0f && lock <= 110.0f) {
+    j2_locked = true;
+    j2_lock_deg = lock;
+    Serial.printf(">> FLASH NVS: J2 KHOA o %.2f do. Lenh dau tien tu PC se dua J2 toi goc nay. $J U de mo khoa.\n", lock);
   }
   // 19/11/2026: J4 về động cơ cũ có hộp số 5.18. Flash có thể còn tỉ số 1.0 của động cơ 17PM (do $K 4 1.0 + $S ngày
   // 17/11) → J4 chỉ quay 1/5 góc lệnh, rất chậm. Tỉ số J4 < 2.0 coi là dữ liệu cũ → dùng mặc định 5.18.
@@ -1008,6 +1193,7 @@ void loadFromFlash() {
   is_home_calibrated = preferences.getBool("is_calib", false);
   if (is_home_calibrated) {
     Serial.println(">> FLASH NVS: Tim thay moc goc Home da luu! Tu dong kich hoat moc 0.0 do khi khoi dong.");
+    Serial.println("   Robot PHAI dang o tu the 0 DUNG THANG DUNG khi bat nguon (firmware coi vi tri luc bat = 0 do).");
   } else {
     Serial.println(">> FLASH NVS: Chua luu vi tri goc Home. Vui long Set Zero lan dau.");
   }

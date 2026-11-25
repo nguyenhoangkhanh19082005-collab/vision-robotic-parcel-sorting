@@ -34,6 +34,9 @@ installation:
 
 acquisition:
   burst_frames: 15
+  # false (2026-11-23, trạm chỉ xét QR): khung dưới ngưỡng nét vẫn được đọc QR thay vì bị
+  # loại ngay; đọc được QR hay không mới quyết định. true = giữ cổng chất lượng như cũ.
+  quality_gate_blocks: false
   stable_frames: 4
   motion_threshold: 3.5
   # Station gates, calibrated 2026-10-31 on the conveyor fixture at exposure -7:
@@ -86,10 +89,15 @@ label:
     canny_high: 150
 
 qr:
-  try_inverted: true
+  # Tem in chữ đen trên nền trắng: bỏ biến thể đảo màu (nhanh hơn ~25% khi không có mã).
+  try_inverted: false
   upscale: 2.0
   # Hard 25/30 cm samples were recovered by adding a second 3x attempt.
   upscales: [2.0, 3.0]
+  # Không phóng ảnh quá 12 MP (khung 2K giữ nguyên; vùng cắt nhỏ vẫn phóng 2x/3x).
+  max_upscaled_pixels: 12000000
+  # Khung nét nhất không đọc được QR: thử thêm tối đa 2 khung khác trong loạt.
+  extra_frame_attempts: 2
 
 package_detection:
   # QR-anchored target selection: the parcel that owns the decoded QR is boxed,
@@ -111,7 +119,9 @@ package_detection:
   vertical_padding_ratio: 0.025
 
 logo:
-  enabled: true
+  # 2026-11-23: trạm chỉ phân loại theo QR; logo không còn là điều kiện PASS.
+  # Đặt true + classification.require_logo: true để bật lại.
+  enabled: false
   template_path: "assets/logo/spx_template.png"
   # GUI calibration overrides are stored beside the executable and reused at startup.
   calibration_path: "config/calibration/logo_calibration.json"
@@ -145,7 +155,13 @@ logo:
   match_ratio: 0.76
 
 damage:
-  enabled: true
+  # 2026-11-23: trạm chỉ xét QR (đọc được hay không). Rách tem ở chỗ khác không quan trọng;
+  # QR rách/mờ thể hiện qua tỉ lệ đọc được (classification.min_qr_read_ratio).
+  # true = bật lại kiểm tra rách viền tem (+ bề mặt thùng nếu check_parcel_surface).
+  enabled: false
+  # 2026-11-23: chỉ kiểm tra RÁCH TEM (label_integrity, không cần ảnh nền).
+  # true = kiểm tra thêm móp/khuyết viền và thủng lỗ trên thùng (cần ảnh nền trống).
+  check_parcel_surface: false
   # Must be captured with the conveyor empty and the final lighting/camera position.
   background_path: "config/calibration/empty_belt.png"
   # Captured from the GUI with no parcel in view for the current floor/desk setup.
@@ -189,7 +205,8 @@ damage:
 
 classification:
   # Test QR/logo/damage locally while Supabase is not commissioned.
-  local_test_mode: true
+  # 25/11: tắt -> tra cứu đơn thật trên Supabase (tự bật lại nếu chưa cấu hình .env).
+  local_test_mode: false
   local_test_bin: "LOCAL_TEST"
   reject_bin: "REJECT"
   label_reject_bin: "REJECT"
@@ -199,8 +216,11 @@ classification:
   destination_field: "destination_chute_id"
   require_qr: true
   require_waybill: true
-  require_logo: true
-  require_damage_check: true
+  require_logo: false
+  require_damage_check: false
+  # QR phải đọc được (cùng nội dung) ở ít nhất tỉ lệ này trong loạt ảnh; thấp hơn = QR
+  # rách hoặc mờ, khó quét -> sọt lỗi. Tem mới (QR 28 mm) đọc 12/12 khung.
+  min_qr_read_ratio: 0.5
 
 audit:
   enabled: true
@@ -220,12 +240,19 @@ controller:
   # Manual UDP control only; no conveyor automation or speed feedback.
   host: "192.168.2.100"
   port: 8120
-  default_speed: 150
+  # 2026-11-23: PWM 150 quá nhanh cho camera dừng kiện; vận hành ở 30-50.
+  default_speed: 40
 
 supabase:
   # Bật sau khi đã đặt SUPABASE_URL / SUPABASE_KEY trong .env và đặt
   # classification.local_test_mode: false. Xem docs/HUONG_DAN_UPLOAD_TRANG_THAI.md.
-  enabled: false
+  # 25/11: BẬT. Thiếu file .env (SUPABASE_URL / SUPABASE_KEY) thì phần mềm tự chạy chế độ
+  # kiểm tra cục bộ và báo trên GUI, không lỗi.
+  enabled: true
+  # Danh sách đơn (chỉ cột định tuyến) được giữ bản sao trên máy, làm mới mỗi ngần này giây.
+  cache_refresh_s: 60
+  # Kết quả ghi xuống outbox trước rồi gửi nền; mất mạng thì thử lại mỗi ngần này giây.
+  retry_s: 10
   # Tra cứu đơn hàng: bảng orders, khóa là mã vận đơn trong QR.
   table: "orders"
   waybill_column: "tracking_code"
@@ -248,21 +275,80 @@ supabase:
 
 station_cycle:
   # CHẠY TỰ ĐỘNG (tab BĂNG TẢI / ESP32), services/station_cycle.py.
-  # Cảm biến thấy kiện -> ESP32 tự dừng sau auto_stop_delay_ms (kiện nằm dưới camera)
-  # -> chờ settle_s -> chụp loạt ảnh MỚI -> kiểm tra -> ghi Supabase -> FWD tới điểm gắp.
+  # trigger "camera" (2026-11-22): camera dừng kiện (chỉ khi kiện nằm TRỌN khung hình) để kiểm tra,
+  #   kiện PASS chạy tới cảm biến quang ở
+  #   ĐIỂM GẮP, ESP32 tự dừng (firmware AUTO) -> robot gắp -> chạy tiếp. Kiện REJECT/MANUAL_REVIEW:
+  #   tắt AUTO, chạy qua cảm biến và rơi khỏi cuối băng tải.
+  #   SAU KHI DỜI CẢM BIẾN: chụp lại ảnh nền băng tải trống (cảm biến không còn trong ảnh).
+  # trigger "sensor": cảm biến đặt dưới camera, dừng một lần (cách cũ).
   # PWM chạy lấy từ thanh trượt của tab băng tải; đặt "speed" ở đây để cố định.
+  trigger: "camera"
   event_port: 8121
-  # Chỉnh khi lắp: khoảng cách cảm biến -> tâm khung hình / tốc độ băng tải.
+  # PWM của chu trình tự động lấy từ thanh trượt nhưng bị kẹp trong khoảng này (2026-11-23).
+  speed_range: [30, 50]
+  # 25/11: cố định PWM 40 cho chạy tự động (không lấy theo thanh trượt) để thời gian
+  # camera -> điểm gắp và trễ dừng (pick_stop_delay_ms) luôn khớp nhau.
+  speed: 40
+  # Kiện tới điểm gắp mà camera chưa kiểm tra (bị cuốn qua khi kiện trước đang chuyển):
+  # chạy lùi đưa về dưới camera tối đa ngần này giây rồi kiểm tra. 0 = tắt (cho rơi sọt lỗi).
+  backup_max_s: 15   # 25/11: lần lùi đầu tiên trên băng thật mất ~8 s (2 lần sau ~3 s)
+  # Camera dừng lố (đầu kiện ra khỏi khung do quán tính/trễ): lùi băng tải từng nhịp ngắn
+  # (REV, chạy ngược về phía đầu băng tải, xa cảm biến) cho tới khi kiện nằm trọn khung.
+  recenter_pulses: 3        # 0 = tắt
+  recenter_speed: 30
+  recenter_pulse_s: 0.15
+  # sensor: cảm biến -> dừng dưới camera. camera: cảm biến -> dừng tại điểm gắp.
   auto_stop_delay_ms: 300
+  # 2026-11-24: cảm biến đặt TRƯỚC điểm gắp; từ lúc cảm biến thấy mép trước của kiện tới lúc
+  # dừng để gắp: ban đầu ước lượng 1-1,5 s (1200 ms), 24/11 người vận hành yêu cầu chạy thêm 1 s
+  # -> 2200 ms (gửi xuống ESP32 qua AUTO:1:<ms>, cần firmware v2.1).
+  # Kiện dừng lố/thiếu điểm gắp thì chỉnh số này, KHÔNG cần nạp lại firmware.
+  pick_stop_delay_ms: 2200     # 24/11: chạy thêm 1 s so với 1200 theo người vận hành
+  # Không có robot mà kiện dừng đã qua khỏi cảm biến (trễ 2200 ms): cảm biến không thấy lúc
+  # người nhấc kiện. 0 = băng đứng chờ tới khi bấm ĐÃ LẤY KIỆN (phím Space) trên GUI.
+  # 25/11: trước là 8 s -> chưa kịp nhấc thì băng đẩy kiện PASS rơi xuống sọt lỗi.
+  manual_pick_s: 0
   # Nếu mất gói AUTOSTOP, PC tự gửi STOP sau delay + grace. Phải ngắn hơn thời gian
-  # kiện đi qua cảm biến, nếu không kiện sẽ trôi khỏi camera.
+  # kiện đi qua cảm biến.
   stop_grace_s: 0.8
   settle_s: 0.4
   # Chụp lại tối đa 2 lần khi ảnh mờ/chói; vẫn lỗi thì ghi MANUAL_REVIEW (sọt loại).
-  quality_retries: 2
-  # Kiện phải rời cảm biến trong thời gian này sau khi cho chạy tiếp, nếu không: dừng + FAULT.
+  quality_retries: 1
   release_timeout_s: 6.0
+  # camera -> cảm biến điểm gắp; robot phải gắp xong trong pick_timeout_s.
+  transfer_timeout_s: 10.0
+  pick_timeout_s: 120.0
   poll_s: 0.25
+  # Phát hiện kiện vào khung hình (services/arrival.py), so với ảnh nền băng tải trống.
+  # Kiện phải cách nhau xa hơn quãng camera -> điểm gắp; kiện bị cuốn qua camera khi
+  # kiện trước đang được chuyển sẽ tới điểm gắp ở dạng MANUAL_REVIEW (thùng LỖI).
+  arrival:
+    # x, y, w, h. 24/11: chỉ lấy mặt băng giữa 2 thanh ray (ray ở x ~0,33 và ~0,67 trên
+    # ảnh nền hiện tại); ray nhôm trắng đổi sáng theo đèn nên hay bị coi là "kiện".
+    roi: [0.35, 0.0, 0.30, 1.0]
+    axis: "y"                     # băng tải chạy theo chiều dọc ảnh
+    center_line: 0.5              # ưu tiên dừng khi tâm kiện tới giữa khung hình
+    edge_margin: 0.02             # CHỈ dừng khi cả kiện nằm trọn trong khung (cách mép >= 2 %)
+    latency_s: 0.12               # bù trễ camera + UDP + motor; đo lại tại trạm
+    difference_threshold: 25
+    min_area_ratio: 0.04
+    confirm_frames: 2
+    empty_frames: 3
+    # 24/11: chỉ vùng thay đổi CÓ DI CHUYỂN mới được coi là kiện (băng đang chạy thì kiện
+    # luôn chạy theo). Vùng đứng yên (vệt sáng, bóng, ray) bị bỏ qua sau 1 s và được
+    # học vào ảnh nền sau 4 s. Đèn tắt (độ sáng ngoài 0,5-2 lần ảnh nền quá 2 s) -> FAULT.
+    moving_speed: 0.03
+    static_still_s: 1.0
+    static_absorb_s: 4.0
+    light_gain_range: [0.5, 2.0]
+    light_fault_s: 2.0
+    # 25/11: vệt phản chiếu đèn trên băng bóng CHẠY THEO BĂNG và đổi hình -> bị coi là kiện.
+    # Vùng chỉ là kiện khi trung vị độ sáng L >= 100 (vệt sáng <= 82, kiện thật 130-150)
+    # hoặc độ chi tiết >= 30. Điểm ảnh tối (< 80) và trơn (< 8) bị bỏ khỏi mặt nạ.
+    object_min_lightness: 100
+    object_min_texture: 30
+    glare_max_lightness: 80
+    glare_max_texture: 8
 
 # ---------------------------------------------------------------------------
 # Khổ tem vận đơn. Đổi một dòng này khi chuyển sang tem A7; mỗi khổ giữ mẫu logo
@@ -271,15 +357,43 @@ station_cycle:
 # phụ thuộc khổ tem. Nắn nhãn neo theo QR: nếu bố cục A7 là A6 thu nhỏ thì ảnh nhãn
 # chuẩn hóa giống hệt A6, chỉ độ phân giải thấp hơn (cạnh QR ~0,705 lần).
 # ---------------------------------------------------------------------------
-label_format: "A6"
+label_format: "A7"    # 22/11/2026: tem web A7 đã phóng to QR lên 20 mm (trước: "A6")
 label_formats:
   A6:
     logo:
       template_path: "assets/logo/spx_template.png"
       calibration_path: "config/calibration/logo_calibration.json"
   A7:
-    # 74 x 105 mm. Mẫu logo tạm sinh từ mẫu A6 (scripts/simulate_a7_label.py
-    # --make-template); thay bằng LẤY MẪU LOGO trên tem A7 thật khi có tem.
+    # 74 x 105 mm, tem do web in (bố cục KHÁC A6 thu nhỏ từ 22/11/2026): QR vector
+    # 20 x 20 mm (21 ô, mức M) đặt ở cột phải, góc trên-trái QR cách mép trái tem
+    # 51,35 mm và mép trên 41,4 mm (outputs/tem_in/phong_to_qr_tem.py). Tem cũ QR
+    # 15,4 mm tại (52,5; 42,4) mm.
+    # Mẫu logo tạm sinh từ mẫu A6 (scripts/simulate_a7_label.py --make-template)
+    # KHÔNG khớp tem web ("Shopaa EXPRESS" ở góc trên-trái): phải LẤY MẪU LOGO trên
+    # tem A7 thật trước khi chạy thật.
+    label:
+      # Vùng cắt QR trên ảnh nhãn chuẩn hóa (vị trí QR bên dưới + lề ~2,5 %).
+      qr_roi: [0.665, 0.37, 0.32, 0.24]
+      rectification:
+        # x = 51,35/74,21, y = 41,4/105,16, rộng = 20/74,21; cao = rộng x 1050/1480
+        # (rectifier ép pixel vuông theo chiều rộng).
+        qr_target_roi: [0.691953, 0.393686, 0.269506, 0.191203]
+    package_detection:
+      label_qr_roi: [0.692, 0.394, 0.270, 0.190]
     logo:
       template_path: "assets/logo/spx_template_a7.png"
       calibration_path: "config/calibration/logo_calibration_a7.json"
+  A7_QR28:
+    # 23/11/2026: tem A7 bản "QR + logo lớn" (outputs/tem_in/phong_to_qr_logo_tem.py):
+    # QR 28 x 28 mm tại (44,25; 40,87) mm, logo phóng 1,35 lần ở (3,2–39,8; 2,9–8,8) mm.
+    # Chưa có mẫu logo: chọn khổ này rồi LẤY MẪU LOGO trên tem in thật (ghi file riêng).
+    label:
+      qr_roi: [0.57, 0.365, 0.42, 0.32]
+      rectification:
+        # x = 44,25/74,21, y = 40,87/105,16, rộng = 28,02/74,21; cao = rộng x 1050/1480
+        qr_target_roi: [0.596281, 0.388646, 0.377577, 0.267876]
+    package_detection:
+      label_qr_roi: [0.596, 0.389, 0.378, 0.267]
+    logo:
+      template_path: "assets/logo/spx_template_a7_qr28.png"
+      calibration_path: "config/calibration/logo_calibration_a7_qr28.json"

@@ -63,7 +63,7 @@ class ConveyorPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(5)
-        title = QLabel("BĂNG TẢI / ESP32 · UDP MANUAL")
+        title = QLabel("ESP32 qua UDP")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
         endpoint = QHBoxLayout()
@@ -80,7 +80,7 @@ class ConveyorPanel(QFrame):
         self._endpoint_value = (self.host.text(), self.port.value())
         self.host.editingFinished.connect(self._endpoint_changed)
         self.port.valueChanged.connect(self._endpoint_changed)
-        self.ping_button = QPushButton("PING")
+        self.ping_button = QPushButton("Kiểm tra kết nối")
         self.ping_button.setObjectName("secondary")
         self.ping_button.clicked.connect(lambda: self._send("PING"))
         endpoint.addWidget(self.host, 1)
@@ -101,10 +101,10 @@ class ConveyorPanel(QFrame):
         layout.addLayout(speed_row)
 
         buttons = QGridLayout()
-        self.forward_button = QPushButton("CHẠY TIẾN")
-        self.reverse_button = QPushButton("CHẠY LÙI")
-        self.stop_button = QPushButton("DỪNG")
-        self.stop_button.setStyleSheet("background:#a83232; border-color:#e16b6b; color:white;")
+        self.forward_button = QPushButton("Chạy tiến")
+        self.reverse_button = QPushButton("Chạy lùi")
+        self.stop_button = QPushButton("Dừng")
+        self.stop_button.setStyleSheet("background:#c8372d; border-color:#ef7a70; color:white;")
         self.stop_button.setToolTip("Lệnh STOP qua UDP; KHÔNG thay thế nút dừng khẩn phần cứng.")
         self.forward_button.clicked.connect(lambda: self._send("FWD"))
         self.reverse_button.clicked.connect(lambda: self._send("REV"))
@@ -113,9 +113,9 @@ class ConveyorPanel(QFrame):
         buttons.addWidget(self.reverse_button, 0, 1)
         buttons.addWidget(self.stop_button, 0, 2)
         layout.addLayout(buttons)
-        self.status = QLabel("CHƯA KẾT NỐI · Không có telemetry tốc độ thực")
+        self.status = QLabel("Chưa kết nối. Chưa có dữ liệu tốc độ thật")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet("color:#d29922; font-size:10px;")
+        self.status.setStyleSheet("color:#e2b347; font-size:11px;")
         layout.addWidget(self.status)
         self._set_run_buttons(False)
 
@@ -129,7 +129,7 @@ class ConveyorPanel(QFrame):
         self._state = "UNKNOWN"
         self._online = False
         self._set_run_buttons(False)
-        self.status.setText("ĐỊA CHỈ ĐÃ ĐỔI · Nhấn PING để xác nhận ESP32 mới")
+        self.status.setText("Địa chỉ đã đổi. Bấm Kiểm tra kết nối để xác nhận ESP32 mới")
         self.state_changed.emit("UNKNOWN", 0)
         self.connection_changed.emit(False)
 
@@ -148,7 +148,7 @@ class ConveyorPanel(QFrame):
                 self._stop_queued = True
                 self._sequence += 1
                 self._set_run_buttons(False)
-                self.status.setText("DỪNG ĐANG CHỜ · gửi STOP ngay khi yêu cầu hiện tại kết thúc")
+                self.status.setText("Lệnh dừng đang chờ: gửi STOP ngay khi yêu cầu hiện tại xong")
             return
         if action in {"FWD", "REV"}:
             if not self._online or self._state == "UNKNOWN":
@@ -170,7 +170,7 @@ class ConveyorPanel(QFrame):
             self._motor_commanded = True
             self.host.setEnabled(False)
             self.port.setEnabled(False)
-        self.status.setText(f"ĐANG GỬI {command} → {host}:{port}")
+        self.status.setText(f"Đang gửi {command} tới {host}:{port}")
         worker = _Request(sequence, host, port, command, self)
         self._workers[sequence] = worker
         worker.completed.connect(self._on_completed)
@@ -194,7 +194,7 @@ class ConveyorPanel(QFrame):
             self._state = "UNKNOWN"
             self._online = False
             self._set_run_buttons(False)
-            self.status.setText(f"MẤT XÁC NHẬN: {error} · Kiểm tra băng tải tại chỗ")
+            self.status.setText(f"Không nhận được xác nhận: {error}. Kiểm tra băng tải tại chỗ")
             self.state_changed.emit("UNKNOWN", 0)
             self.connection_changed.emit(False)
             return
@@ -216,7 +216,7 @@ class ConveyorPanel(QFrame):
             self.host.setEnabled(True)
             self.port.setEnabled(True)
         self._set_run_buttons(True)
-        self.status.setText(f"XÁC NHẬN · {reply.raw} · PWM lệnh, không phải tốc độ đo")
+        self.status.setText(f"Đã xác nhận: {reply.raw} (PWM lệnh, không phải tốc độ đo)")
         self.state_changed.emit(self._state, reply.speed or 0)
         self.connection_changed.emit(True)
 
@@ -247,7 +247,7 @@ class ConveyorPanel(QFrame):
                 self._set_run_buttons(False)
                 self.state_changed.emit("UNKNOWN", 0)
                 self.connection_changed.emit(False)
-                self.status.setText("ĐÓNG ỨNG DỤNG BỊ HỦY · Chưa xác nhận STOP")
+                self.status.setText("Đã hủy đóng ứng dụng: chưa xác nhận STOP")
                 return str(exc)
             self._motor_commanded = False
             self._state = "STOP"

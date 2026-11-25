@@ -59,6 +59,9 @@ class ParcelData:
     waybill_code: str | None = None
     logo: LogoAssessment | None = None
     damage: DamageAssessment | None = None
+    # Share of the burst frames in which the same QR decodes (None: not measured).
+    # A torn or blurred QR decodes only now and then: that is the "hard to scan" signal.
+    qr_read_ratio: float | None = None
 
 
 @dataclass

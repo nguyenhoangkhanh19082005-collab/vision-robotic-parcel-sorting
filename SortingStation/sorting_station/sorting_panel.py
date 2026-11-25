@@ -47,13 +47,21 @@ class SortingController(QObject):
             self.armed = armed
             self.armed_changed.emit(armed)
 
-    def on_inspection(self, decision: str, destination: str | None, waybill: str | None) -> None:
+    def on_inspection(
+        self, decision: str, destination: str | None, waybill: str | None, start: bool = True
+    ) -> None:
+        """``start=False``: the camera cycle will call ``on_parcel_at_pick`` later."""
         self.last_bin = self.settings.resolve_bin(decision, destination)
         stamp = datetime.now().strftime("%H:%M:%S")
         self.last_text = f"{stamp} · {decision} ({destination or '—'}) · {waybill or 'không mã'} → thùng {self.last_bin}"
         self.last_result_changed.emit(self.last_text)
-        if self.armed:
+        if self.armed and start:
             self.sequencer.start_cycle(self.last_bin)
+
+    def on_parcel_at_pick(self, decision: str, destination: str | None) -> bool:
+        """Parcel stopped on the pick sensor: sort it with the bin of ITS inspection."""
+        bin_key = self.settings.resolve_bin(decision, destination)
+        return self.sequencer.start_cycle(bin_key, at_pick=True)
 
     def trigger_last(self) -> bool:
         if self.last_bin is None:
@@ -88,12 +96,12 @@ class SortingCard(QFrame):
         super().__init__(parent)
         self.controller = controller
         sequencer = controller.sequencer
-        self.setObjectName("panel")
+        self.setObjectName("subpanel")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(5)
         header = QHBoxLayout()
-        title = QLabel("PHÂN LOẠI / ROBOT 6 TRỤC")
+        title = QLabel("Robot 6 trục")
         title.setObjectName("sectionTitle")
         self.mode = QLabel()
         header.addWidget(title)
@@ -102,19 +110,19 @@ class SortingCard(QFrame):
         layout.addLayout(header)
         self.last = QLabel(controller.last_text)
         self.last.setWordWrap(True)
-        self.last.setStyleSheet("color:#aebdca; font-size:10px;")
+        self.last.setStyleSheet("color:#93a39e; font-size:11px;")
         layout.addWidget(self.last)
-        self.status = QLabel("SẴN SÀNG")
+        self.status = QLabel("Sẵn sàng")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet("color:#8fc1ff; font-weight:600;")
+        self.status.setStyleSheet("color:#e7edea; font-weight:600;")
         layout.addWidget(self.status)
         row = QHBoxLayout()
-        self.armed = QCheckBox("Tự động sau KIỂM TRA")
+        self.armed = QCheckBox("Robot tự gắp sau mỗi lần kiểm tra")
         self.armed.setToolTip("Mỗi lần KIỂM TRA KIỆN xong, robot tự gắp kiện vào thùng theo kết quả")
-        self.run_button = QPushButton("PHÂN LOẠI")
+        self.run_button = QPushButton("Gắp kiện vừa kiểm tra")
         self.run_button.setToolTip("Chạy chu trình gắp–thả cho kết quả Vision gần nhất")
-        self.stop_button = QPushButton("DỪNG")
-        self.stop_button.setStyleSheet("background:#a83232; border-color:#e16b6b; color:white;")
+        self.stop_button = QPushButton("Dừng robot")
+        self.stop_button.setStyleSheet("background:#c8372d; border-color:#ef7a70; color:white;")
         row.addWidget(self.armed, 1)
         row.addWidget(self.run_button)
         row.addWidget(self.stop_button)
@@ -132,9 +140,9 @@ class SortingCard(QFrame):
 
     def refresh_mode(self) -> None:
         sim = self.controller.sequencer.simulation_mode()
-        self.mode.setText("MÔ PHỎNG" if sim else "ROBOT THẬT")
-        color = "#d29922" if sim else "#f85149"
-        self.mode.setStyleSheet(f"color:{color}; font-size:10px; font-weight:800;")
+        self.mode.setText("Mô phỏng" if sim else "Robot thật")
+        color = "#e2b347" if sim else "#e35d4f"
+        self.mode.setStyleSheet(f"color:{color}; font-size:12px; font-weight:600;")
         self.run_button.setEnabled(not self.controller.sequencer.running)
 
     def _toggle_armed(self, checked: bool) -> None:
@@ -192,7 +200,7 @@ class SortingPanel(QWidget):
             "không phát hiện được trượt bước. Luôn có E-stop/ngắt nguồn động lực khi chạy thật."
         )
         safety.setWordWrap(True)
-        safety.setStyleSheet("color:#e0ad47; font-weight:600; font-size:10px;")
+        safety.setStyleSheet("color:#e2b347; font-size:11px;")
         left_layout.addWidget(safety)
         root.addWidget(left, 4)
 
@@ -246,7 +254,7 @@ class SortingPanel(QWidget):
             "thực tế bằng tab ROBOT rồi nhấn GHI TƯ THẾ cho 'pick' và từng thùng."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#7f91a3; font-size:10px;")
+        hint.setStyleSheet("color:#93a39e; font-size:11px;")
         right_layout.addWidget(hint)
         root.addWidget(right, 5)
 

@@ -16,6 +16,7 @@ from machine_vision.paths import (
 from machine_vision.readers.logo_reader import TemplateLogoDetector
 from machine_vision.readers.qr_reader import QrReader
 from machine_vision.repositories.shipments import (
+    CachedShipmentRepository,
     InMemoryShipmentRepository,
     SupabaseShipmentRepository,
     create_supabase_client,
@@ -26,6 +27,7 @@ from machine_vision.services.damage import PackageDamageDetector
 from machine_vision.services.evidence import EvidenceWriter
 from machine_vision.services.pipeline import VisionPipeline
 from machine_vision.ui.main_window import MainWindow
+from machine_vision.ui.wheel_guard import install_wheel_guard
 
 
 def build_pipeline(
@@ -35,8 +37,12 @@ def build_pipeline(
 ) -> tuple[VisionPipeline, str | None]:
     project_root = project_root or resource_root()
     writable_root = writable_root or runtime_root()
-    config = resolve_label_format(config)
     warnings = []
+    # Before resolving: the caller passes this same dict to build_reporter / the window.
+    supabase_warning = prepare_supabase(config)
+    if supabase_warning:
+        warnings.append(supabase_warning)
+    config = resolve_label_format(config)
     logo_detector = TemplateLogoDetector(config["logo"], project_root, writable_root)
     if logo_detector.template is None:
         warnings.append(f"Logo template not found: {logo_detector.template_path}")
@@ -46,7 +52,15 @@ def build_pipeline(
 
     db_cfg = config["supabase"]
     if db_cfg.get("enabled", False):
-        repository = SupabaseShipmentRepository(db_cfg, _supabase_client())
+        repository = CachedShipmentRepository(
+            SupabaseShipmentRepository(db_cfg, _supabase_client()),
+            refresh_s=float(db_cfg.get("cache_refresh_s", 60.0)),
+        )
+        if repository.loaded_at is None:
+            warnings.append(
+                f"Chưa tải được danh sách đơn từ Supabase ({repository.last_error}). "
+                "Trạm vẫn chạy và tự thử lại; kết quả được giữ chờ gửi khi có mạng."
+            )
     else:
         repository = InMemoryShipmentRepository([])
 
@@ -71,6 +85,30 @@ def _supabase_client():
     return _client_cache[0]
 
 
+def prepare_supabase(config: dict) -> str | None:
+    """Check that Supabase can be used; otherwise fall back to local test mode.
+
+    Missing library or .env must not stop the station from starting (2026-11-25):
+    the window opens in local test mode and says why nothing reaches the web.
+    No network request is made here (the client connects lazily).
+    """
+    db_cfg = config.setdefault("supabase", {})
+    classification = config.setdefault("classification", {})
+    if not db_cfg.get("enabled", False) or classification.get("local_test_mode", False):
+        return None
+    try:
+        _supabase_client()
+    except Exception as exc:  # noqa: BLE001 - any setup problem means "not configured"
+        db_cfg["enabled"] = False
+        db_cfg["unavailable_reason"] = str(exc)
+        classification["local_test_mode"] = True
+        return (
+            f"Supabase chưa sẵn sàng: {exc}. Trạm chạy chế độ kiểm tra cục bộ, "
+            "kết quả KHÔNG được gửi lên web. Xem docs/HUONG_DAN_UPLOAD_TRANG_THAI.md."
+        )
+    return None
+
+
 def build_reporter(config: dict, writable_root: Path) -> SortingLogReporter | None:
     """Result upload runs only against the real database, never in local test mode."""
     db_cfg = config["supabase"]
@@ -87,6 +125,8 @@ def build_reporter(config: dict, writable_root: Path) -> SortingLogReporter | No
         supabase_sender(_supabase_client(), str(db_cfg.get("log_table", "sorting_logs"))),
         outbox if outbox.is_absolute() else writable_root / outbox,
         destination_field=str(classification.get("destination_field", "destination_chute_id")),
+        background=True,
+        retry_s=float(db_cfg.get("retry_s", 10.0)),
     )
 
 
@@ -111,6 +151,7 @@ def main() -> int:
     project_root = asset_root(config_path)
 
     app = QApplication(sys.argv)
+    install_wheel_guard(app)
     pipeline, warning = build_pipeline(config, project_root, writable_root)
     evidence = EvidenceWriter(config.get("audit", {}), writable_root)
     reporter = build_reporter(config, writable_root)
@@ -120,7 +161,11 @@ def main() -> int:
     window.show()
     if warning:
         QMessageBox.warning(window, "Commissioning required", warning)
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        if reporter is not None:
+            reporter.close()
 
 
 if __name__ == "__main__":

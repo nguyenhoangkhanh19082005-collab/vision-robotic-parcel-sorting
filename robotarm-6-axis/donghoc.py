@@ -87,6 +87,11 @@ def matrix_to_euler(R, degrees=True):
     res = np.array([roll, pitch, yaw])
     return np.degrees(res) if degrees else res
 
+# 24/11/2026: J2 KHÓA CỨNG (firmware J2_HARD_LOCK) ở góc này — slider J2 bị khóa, IK chỉ dùng J1, J3–J6.
+# None = mở khóa (phải đồng thời đặt J2_HARD_LOCK 0 trong firmware).
+J2_LOCK_DEG = 0.0
+
+
 class kinematic:
     def __init__(self, dh_params_custom=None):
         if dh_params_custom is None:
@@ -94,12 +99,18 @@ class kinematic:
         else:
             self.dh = np.array(dh_params_custom, copy=True, dtype=float)
 
+        # 24/11/2026 (lần 3): tư thế 0 = HOME THẬT của robot (dong_hoc_step.py): so với chữ L đầu hút chúc xuống
+        #   (cánh tay trên đứng, cẳng tay ngang) thì J2 cúi trước +12.5°, J3 +12.5°, J5 +22°, J6 −124°
+        #   (cẳng tay chúc 25° dưới phương ngang, đầu hút nghiêng 3°). Đổi điểm dạy chữ L cũ: q_mới = q_cũ − [0, 12.5, 12.5, 0, 22, −124].
+        #   J3: quét va chạm mesh (cẳng tay ↔ cánh tay trên/đế, theo chữ L) an toàn khoảng [-210, +35] → dời −12.5 → [-220, +20]
+        #       (+ = cẳng tay chúc xuống thêm).
+        #   J5: dải cơ khí [-20, 200] theo chữ L → dời −22 → [-42, 178]. J2: [-90, 110] → [-102.5, 97.5] (đang khóa).
         self.joint_limits = [
             (-170.0, 170.0), # Joint 1: Waist
-            (-90.0,  110.0), # Joint 2: Shoulder
-            (-150.0, 150.0), # Joint 3: Elbow
+            (-102.5,  97.5), # Joint 2: Shoulder (KHÓA CỨNG ở J2_LOCK_DEG — xem trên)
+            (-220.0,  20.0), # Joint 3: Elbow
             (-180.0, 180.0), # Joint 4: Wrist Roll
-            (-110.0, 110.0), # Joint 5: Wrist Pitch
+            (-42.0,  178.0), # Joint 5: Wrist Pitch
             (-360.0, 360.0)  # Joint 6: Wrist Yaw
         ]
 

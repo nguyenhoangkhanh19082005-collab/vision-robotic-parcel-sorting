@@ -164,6 +164,8 @@ class PoseLibrary:
 
     def teach(self, name: str, joints_deg) -> None:
         values = [float(v) for v in joints_deg]
+        for index, angle in self.model.locked.items():   # J2 khóa: telemetry có thể lệch vài phần độ
+            values[index] = angle
         if not self.model.within_limits_deg(values):
             raise PlanningError("Tư thế dạy vượt giới hạn khớp")
         self.taught[name] = values
@@ -193,7 +195,10 @@ class PoseLibrary:
         if name in self.taught:
             return list(self.taught[name])
         if name == "home":
-            return list(self.settings.home_joints_deg)
+            home = list(self.settings.home_joints_deg)
+            for index, angle in self.model.locked.items():   # khớp khóa: HOME giữ đúng góc khóa
+                home[index] = angle
+            return home
         xyz = self.target_xyz_mm(name)
         if xyz is None:
             raise PlanningError(f"Không có tư thế '{name}'")
@@ -218,7 +223,14 @@ class PoseLibrary:
         pick = self.resolve("pick", start_deg)
         pick_above = self.above("pick", pick, pick)
         drop = self.resolve(f"bin:{bin_key}", pick_above)
-        drop_above = self.above(f"bin:{bin_key}", drop, drop)
+        # 24/11/2026: J2 khóa → điểm thả DẠY TAY ở rìa tầm với có thể không lên thêm được approach_height_mm.
+        # Khi đó thả luôn tại tư thế đã dạy (bỏ bước hạ/nhấc ở thùng) thay vì hủy cả chu trình.
+        try:
+            drop_above = self.above(f"bin:{bin_key}", drop, drop)
+        except PlanningError:
+            if f"bin:{bin_key}" not in self.taught:
+                raise
+            drop_above = list(drop)
         home = self.resolve("home", drop_above)
         return [
             ("trên điểm gắp", pick_above),
@@ -296,11 +308,14 @@ class SortingSequencer(QObject):
         return not self.robot.is_connected()
 
     # -------------------------------------------------------- khởi động
-    def start_cycle(self, bin_key: str) -> bool:
+    def start_cycle(self, bin_key: str, at_pick: bool = False) -> bool:
+        """``at_pick``: the parcel already waits at the pick point (MachineVision camera
+        cycle stopped it on the pick sensor), so no timed conveyor transfer."""
+
         def build(start):
             plan = self.poses.plan_cycle(bin_key, start)
             steps: list[_Step] = []
-            if self.settings.conveyor_transfer_s > 0:
+            if self.settings.conveyor_transfer_s > 0 and not at_pick:
                 steps += self._conveyor_steps()
             else:
                 steps.append(_Step("parcel_at_pick", "kiện tại điểm gắp"))
@@ -326,7 +341,11 @@ class SortingSequencer(QObject):
             return steps
 
         self._bin_key = bin_key
-        return self._start(build, f"PHÂN LOẠI → {bin_key}")
+        self._at_pick = at_pick
+        try:
+            return self._start(build, f"PHÂN LOẠI → {bin_key}")
+        finally:
+            self._at_pick = False
 
     def start_move_to(self, pose_name: str) -> bool:
         def build(start):
@@ -360,6 +379,7 @@ class SortingSequencer(QObject):
         if (
             real
             and self.settings.conveyor_transfer_s > 0
+            and not getattr(self, "_at_pick", False)
             and (self.conveyor is None or not self.conveyor.online)
         ):
             return self._refuse("Băng tải chưa ONLINE (PING/ACK) — không thể chuyển kiện tới điểm gắp")

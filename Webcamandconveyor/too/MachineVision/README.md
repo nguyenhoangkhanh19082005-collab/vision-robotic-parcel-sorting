@@ -1,14 +1,14 @@
 # Parcel Vision System
 
-Hệ thống thị giác máy phục vụ kiểm tra kiện hàng trên băng tải, kết hợp đọc QR, nhận diện logo, kiểm tra dấu hiệu hư hỏng, giao diện vận hành PyQt6 và Digital Twin 3D. ESP32/W5500 được tích hợp để điều khiển băng tải thủ công qua Ethernet UDP.
+Hệ thống thị giác máy kiểm tra kiện hàng trên băng tải: đọc QR, nhận diện logo, phát hiện tem rách và hư hỏng, giao diện vận hành PyQt6 và Digital Twin 3D. ESP32/W5500 điều khiển băng tải qua Ethernet UDP. Ở chế độ chạy tự động, camera tự dừng kiện để kiểm tra, kiện đạt chạy tới điểm gắp của robot, kiện lỗi rơi xuống sọt lỗi, và kết quả được gửi lên web (Supabase).
 
 | Thông tin | Giá trị |
 |---|---|
-| Phiên bản mã nguồn | `0.3.0` |
-| Cập nhật tài liệu | 21/11/2026 |
+| Phiên bản mã nguồn | `0.4.0` |
+| Cập nhật tài liệu | 25/11/2026 |
 | Môi trường triển khai hiện tại | Windows, Python, webcam USB |
-| Chế độ mặc định | Trạm băng tải cố định, kiểm tra cục bộ; Supabase bật bằng cấu hình |
-| Trạng thái dự án | Prototype phục vụ thử nghiệm và đánh giá kỹ thuật |
+| Chế độ mặc định | Chạy tự động trên băng tải, gửi kết quả lên Supabase (cần file `.env`; thiếu thì tự chạy chế độ thử cục bộ) |
+| Trạng thái dự án | Prototype đã chạy trên băng tải thật ngày 25/11/2026 (52 ca ghi lại, phát lại 0 lỗi) |
 
 **Bắt đầu tại [Cài đặt và chạy](#3-cài-đặt-và-chạy).** Nếu đã mở được GUI, chuyển tới [Thử nghiệm Vision](#4-thử-nghiệm-vision) hoặc [Điều khiển băng tải](#5-điều-khiển-băng-tải-esp32).
 
@@ -22,10 +22,10 @@ Hệ thống thị giác máy phục vụ kiểm tra kiện hàng trên băng t�
 | Định vị kiện | QR làm neo; kiện = vùng khác ảnh nền chứa QR; nhãn A6/A7 chọn trong cấu hình | Phương pháp hình học; chưa có detector AI độc lập QR |
 | Logo | SIFT, matching và RANSAC; lấy template trực tiếp từ GUI | Đối chiếu với mẫu logo đã hiệu chuẩn |
 | Hư hỏng | Rách nhãn (khía viền giấy), móp/khuyết viền kiện, thủng lỗ trên carton; đo theo cạnh QR | 2D từ trên xuống; móp giữa nắp không đổi viền chưa phát hiện |
-| HMI | Live/snapshot, kết quả, KPI, event log và trạng thái thiết bị | Kiểm tra tay hoặc CHẠY TỰ ĐỘNG theo cảm biến |
+| HMI | Một trang Vận hành: camera, nút chạy tự động, kết quả kiện, số liệu ca, các kiện trước, dải hành trình kiện 1–5 | Kiểm tra tay hoặc chạy tự động; lăn chuột không làm đổi thanh trượt |
 | Digital Twin | Orbit/pan/zoom, lớp hiển thị, robot 6 trục mô phỏng | Cảnh dựng bằng phần mềm; chờ mô hình 3D thật |
-| Băng tải | Thủ công (PING/tiến/lùi/STOP) và chu trình tự động: cảm biến → dừng → kiểm tra → ghi Supabase → chạy tiếp | Firmware v2; chưa có encoder; chưa thử trên phần cứng |
-| Dữ liệu | Lưu ảnh và kết quả cục bộ; tra `orders`, ghi `sorting_logs` (có outbox khi mất mạng) | Supabase mặc định tắt, chưa nghiệm thu với DB thật |
+| Băng tải | Chạy tay qua UDP; chu trình tự động: camera dừng kiện khi nằm trọn khung → kiểm tra → kiện đạt tới điểm gắp, kiện lỗi rơi sọt lỗi; kiện bị cuốn qua camera thì chạy lùi về để kiểm tra | Firmware v2.1 (dừng trễ 2200 ms ở điểm gắp), PWM 40 cố định; đã chạy trên băng thật; chưa có encoder |
+| Dữ liệu | Tra `orders` từ bản sao cục bộ (làm mới 60 s); ghi `sorting_logs` qua luồng nền và outbox; trigger đổi đơn sang `SORTED` | Trigger đã kiểm trên database thật (giao dịch rollback); cần `.env` để gửi thật |
 
 OCR địa chỉ người gửi/người nhận đã được loại khỏi phạm vi. Ở chế độ CHẠY TỰ ĐỘNG, kết quả Vision điều khiển băng tải (dừng/chạy tiếp); robot nhận sọt đích qua dòng `sorting_logs`. Chi tiết: [docs/station_auto_cycle.md](docs/station_auto_cycle.md).
 
@@ -47,8 +47,10 @@ Webcam → Chuỗi frame → Cổng chất lượng ảnh → Frame được ch�
 
 Thao tác viên → Tab ESP32 → Lệnh UDP → ACK → Trạng thái lệnh trên GUI/Digital Twin
 
-CHẠY TỰ ĐỘNG: cảm biến → ESP32 tự STOP → chụp loạt ảnh mới → kiểm tra → ghi Supabase
-              → FWD tới điểm gắp → chờ cảm biến trống → kiện tiếp theo
+Chạy tự động: băng chạy PWM 40 → camera thấy kiện nằm trọn khung → STOP → chụp loạt ảnh → kiểm tra
+              → đạt: chạy tới điểm gắp, ESP32 dừng sau 2200 ms → robot hoặc người lấy kiện
+              → lỗi: chạy qua cảm biến, rơi xuống sọt lỗi
+              → kết quả vào outbox → luồng nền gửi Supabase → trigger đổi đơn sang SORTED
 ```
 
 Cổng chất lượng ảnh là bước kiểm tra độ nét/chuyển động/chói trước khi phân tích. Một frame đạt `READY` vẫn có thể có QR không đọc được, logo không khớp hoặc kiện lỗi.
@@ -143,22 +145,23 @@ Template được lưu tại `assets/logo/spx_template.png`; vùng tìm kiếm �
 
 1. Đặt kiện vào vùng quan sát, để QR và mặt cần kiểm tra nhìn thấy.
 2. Đợi vật đứng yên và chỉ báo chất lượng đạt `READY`.
-3. Nhấn **KIỂM TRA KIỆN**.
-4. Xem riêng các trường **QR PAYLOAD**, **MÃ VẬN ĐƠN**, **LOGO**, **TÌNH TRẠNG KIỆN** và lý do quyết định.
-5. GUI chuyển sang **ẢNH KIỂM TRA** để giữ ảnh đã xử lý. Nhấn **LIVE** để trở lại camera.
+3. Nhấn **Kiểm tra tay** dưới khung camera.
+4. Xem các trường **Mã vận đơn**, **Nội dung QR**, **Logo**, **Tình trạng kiện** và lý do trong thẻ **Kiện vừa kiểm tra**.
+5. Khung camera chuyển sang **Ảnh kiểm tra** để giữ ảnh đã xử lý. Nhấn **Trực tiếp** để trở lại camera.
 
 Box kiện dựa vào QR và cạnh ảnh. Bộ chọn frame vẫn dùng vùng `label.roi` trong cấu hình; nếu kiện lệch nhiều khỏi vùng này, cần điều chỉnh ROI hoặc setup camera.
 
 ### 4.5. Đọc kết quả
 
-| Hiển thị trong chế độ local | Ý nghĩa |
+| Hiển thị | Ý nghĩa |
 |---|---|
-| `LOCAL PASS` | Các điều kiện QR, logo và damage theo cấu hình đã đạt; đã bỏ qua tra cứu database |
-| `LOCAL FAIL` | Có điều kiện kiểm tra không đạt hoặc phát hiện dấu hiệu hư hỏng |
-| `LOCAL REVIEW` | Chưa đủ dữ liệu/hiệu chuẩn để kết luận; cần người kiểm tra |
-| `QUALITY HOLD` | Chưa có frame đạt cổng chất lượng; chưa hoàn tất inspection |
+| **Đạt, sọt N** | QR, tem, logo và tình trạng kiện đều đạt; mã có trong bảng `orders`, đi tới sọt N |
+| **Loại** | Tem rách, QR rách/mờ/không có, kiện hỏng, hoặc mã không có trong `orders` |
+| **Cần xem lại** | Chưa đủ dữ liệu/hiệu chuẩn để kết luận, hoặc không tra được đơn do mất mạng |
+| "(thử cục bộ)" | Chưa nối Supabase (thiếu `.env`): không tra đơn, không gửi kết quả |
+| **Ảnh chưa đạt, chờ chụp lại** | Chưa có frame đạt cổng chất lượng; chưa hoàn tất kiểm tra |
 
-`SCAN SUCCESS` là tỷ lệ inspection đọc được QR trong phiên, không phải tỷ lệ kiện đạt. Kết quả local chưa xác nhận vận đơn tồn tại trên Supabase và chưa kích hoạt cơ cấu phân loại.
+**Đọc được QR** trong thẻ Ca làm việc là tỷ lệ kiện đọc được QR trong phiên, không phải tỷ lệ kiện đạt.
 
 Nên thử ít nhất một kiện bình thường, một mẫu logo sai/không khớp và một kiện có lỗi nhìn thấy; đối chiếu ảnh kiểm tra với kết quả thực tế.
 
@@ -186,13 +189,13 @@ Kết nối laptop với W5500 qua Ethernet và cấu hình IPv4 của card Ethe
 
 ### 5.2. Trình tự thử
 
-1. Mở tab **BĂNG TẢI / ESP32**; nhập IP và port đúng với firmware.
-2. Nhấn **PING**. `PONG` xác nhận ESP32 trả lời qua UDP.
-3. Nhấn **DỪNG** và đợi ACK STOP. GUI cần xác nhận này trước khi cho chạy.
-4. Chọn PWM phù hợp với motor, tải và điều kiện thử; nhấn **CHẠY TIẾN** hoặc **CHẠY LÙI**.
-5. Để thay đổi PWM, đổi slider rồi nhấn lại nút chạy cùng chiều. Slider không tự gửi lệnh.
-6. Để đảo chiều, nhấn **DỪNG**, đợi ACK và quan sát motor đã dừng, rồi mới chạy chiều còn lại.
-7. Kết thúc thử bằng **DỪNG**, kiểm tra motor tại chỗ.
+1. Mở tab **Băng tải & camera**; nhập IP và port đúng với firmware.
+2. Nhấn **Kiểm tra kết nối** (gửi PING). `PONG` xác nhận ESP32 trả lời qua UDP.
+3. Nhấn **Dừng** và đợi ACK STOP. GUI cần xác nhận này trước khi cho chạy.
+4. Kéo thanh PWM phù hợp với motor, tải và điều kiện thử; nhấn **Chạy tiến** hoặc **Chạy lùi**. Lăn chuột không làm đổi thanh trượt.
+5. Để thay đổi PWM, kéo thanh rồi nhấn lại nút chạy cùng chiều. Thanh trượt không tự gửi lệnh.
+6. Để đảo chiều, nhấn **Dừng**, đợi ACK và quan sát motor đã dừng, rồi mới chạy chiều còn lại.
+7. Kết thúc thử bằng **Dừng**, kiểm tra motor tại chỗ.
 
 GUI cập nhật trạng thái lệnh sau ACK hợp lệ. Khi timeout, trạng thái là `UNKNOWN`; khi đóng ứng dụng đã gửi lệnh chạy, GUI thử gửi STOP.
 
@@ -200,11 +203,27 @@ GUI cập nhật trạng thái lệnh sau ACK hợp lệ. Khi timeout, trạng t
 
 ### 5.3. Chu trình tự động
 
-Cần firmware v2 (`firmware/conveyor_sensor`) và camera đã kết nối. Trong tab **BĂNG TẢI / ESP32**: PING → DỪNG (đợi ACK) → chọn PWM → **CHẠY TỰ ĐỘNG**. Băng tải chạy; khi cảm biến thấy kiện, ESP32 tự dừng, GUI kiểm tra rồi cho chạy tiếp. Nhấn **DỪNG TỰ ĐỘNG** hoặc **DỪNG** để kết thúc. Tham số nằm ở `station_cycle` trong cấu hình. Diễn tập không cần phần cứng: `python scripts\rehearse_auto_cycle.py`. Xem [docs/station_auto_cycle.md](docs/station_auto_cycle.md).
+Cần firmware v2.1 (`firmware/conveyor_sensor`, nạp bằng Arduino IDE; xem `firmware/conveyor_sensor/NAP_FIRMWARE.md`) và camera đã kết nối. Trên trang **Vận hành** nhấn **Bắt đầu chạy tự động**:
+
+| Bước | Diễn biến |
+|---|---|
+| 1. Camera kiểm tra | Băng chạy PWM 40 cố định (`station_cycle.speed`). Camera dừng băng khi kiện nằm trọn khung hình (kiện đặt chéo dài hơn khung thì dừng lúc đầu kiện sắp ra khỏi khung), chụp loạt ảnh và kiểm tra |
+| 2. Tới điểm gắp | Kiện đạt chạy tới cảm biến quang; ESP32 dừng băng sau 2200 ms (`pick_stop_delay_ms`). Kiện lỗi chạy qua cảm biến và rơi xuống sọt lỗi |
+| 3. Chờ gắp | Có robot: robot gắp. Không robot: nhấc kiện ra rồi nhấn **Đã lấy kiện** (phím Space); băng đứng yên tới lúc đó |
+| 4. Robot thả vào thùng | Thùng theo sọt của đơn hàng (`SortingStation/config/station.yaml`) |
+| 5. Lưu lên web | Kết quả ghi vào outbox rồi gửi nền lên Supabase |
+
+Một số tình huống đã được xử lý trong lúc chạy thử trên băng thật:
+- Vệt phản chiếu đèn trên băng bóng không bị coi là kiện.
+- Kiện đặt sát nhau bị cuốn qua camera thì băng chạy lùi đưa kiện về để kiểm tra.
+- Tay che cảm biến điểm gắp không tạo kết quả giả.
+- Đèn tắt thì báo lỗi, không chạy mù.
+
+Mỗi lần chạy tự động được ghi vào `logs/runs/` và phát lại được bằng `python scripts\replay_station_runs.py logs\runs\<giờ chạy>`. Chi tiết: [docs/station_auto_cycle.md](docs/station_auto_cycle.md).
 
 ## 6. Digital Twin
 
-Trong tab **DIGITAL TWIN 3D**:
+Trong tab **Mô hình 3D** (trạm hợp nhất có thêm mô hình thu gọn ngay trên trang Vận hành):
 
 - Kéo chuột trái để xoay góc nhìn; kéo chuột phải để pan.
 - Dùng con lăn để zoom; double-click để reset.
@@ -266,7 +285,9 @@ Cài thư viện kiểm thử rồi chạy:
 .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=build\pytest-temp
 ```
 
-Mốc kiểm tra ngày **21/11/2026**: **75 tests passed**, gồm thuật toán xử lý ảnh, quy tắc phân loại, ghi `sorting_logs`, giao tiếp UDP/worker GUI và chu trình tự động với ESP32 giả lập. Kết quả này không thay thế kiểm thử camera, motor hoặc độ chính xác trên băng tải thật.
+Mốc kiểm tra ngày **25/11/2026**: **183 test đạt**. Gồm thuật toán xử lý ảnh, quy tắc phân loại, gửi `sorting_logs` (gửi nền, mất mạng, khởi động lại), giao tiếp UDP, chu trình tự động với ESP32 giả lập, chặn lăn chuột trên thanh trượt, và **52 ca phát lại từ bản ghi băng tải thật** (`tests/test_station_runs.py`).
+
+Bộ ảnh thật `dataset/station_runs/` không có trong repo vì ảnh tem in tên, địa chỉ, số điện thoại người nhận. Khi thiếu thư mục này, các test phát lại được bỏ qua.
 
 Để build EXE từ source hiện tại:
 

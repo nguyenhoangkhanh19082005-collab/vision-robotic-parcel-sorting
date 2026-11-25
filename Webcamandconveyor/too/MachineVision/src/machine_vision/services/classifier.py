@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from machine_vision.models import ClassificationResult, Decision, ParcelData
-from machine_vision.repositories.shipments import ShipmentRepository
+from machine_vision.repositories.shipments import LookupUnavailable, ShipmentRepository
 
 
 class ParcelClassifier:
@@ -60,11 +60,21 @@ class ParcelClassifier:
                 parcel,
             )
 
+        minimum = float(self.settings.get("min_qr_read_ratio", 0.0))
+        if minimum > 0 and parcel.qr_read_ratio is not None and parcel.qr_read_ratio < minimum:
+            return ClassificationResult(
+                Decision.REJECT,
+                str(self.settings.get("reject_bin", "REJECT")),
+                f"QR khó đọc (rách hoặc mờ): chỉ đọc được {parcel.qr_read_ratio:.0%} số khung "
+                f"(cần >= {minimum:.0%})",
+                parcel,
+            )
+
         if self.settings.get("local_test_mode", False):
             return ClassificationResult(
                 Decision.PASS,
                 str(self.settings.get("local_test_bin", "LOCAL_TEST")),
-                "Kiểm tra cục bộ đạt: QR, logo và tình trạng kiện hợp lệ; "
+                "Kiểm tra cục bộ đạt: QR đọc được và các mục kiểm tra đang bật đều hợp lệ; "
                 "đã bỏ qua truy vấn Supabase",
                 parcel,
             )
@@ -76,7 +86,16 @@ class ParcelClassifier:
                 "No lookup key is available for the station database",
                 parcel,
             )
-        record = self.repository.find_by_waybill(parcel.waybill_code)
+        try:
+            record = self.repository.find_by_waybill(parcel.waybill_code)
+        except LookupUnavailable as exc:
+            # Network/database down: we do not know the order, it is not "unknown".
+            return ClassificationResult(
+                Decision.MANUAL_REVIEW,
+                str(self.settings.get("unknown_bin", "MANUAL_REVIEW")),
+                str(exc),
+                parcel,
+            )
         if record is None:
             return ClassificationResult(
                 Decision.REJECT,

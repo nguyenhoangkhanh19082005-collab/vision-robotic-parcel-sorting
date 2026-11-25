@@ -29,12 +29,17 @@ from typing import Iterable, Sequence
 import numpy as np
 
 # Giới hạn khớp đồng bộ với donghoc.kinematic.joint_limits và slider của GUI robot (độ)
+# 24/11/2026: tư thế 0 = CHỮ L, ĐẦU HÚT CHÚC XUỐNG (dong_hoc_step.py). So với tư thế 0 dựng đứng (22/11):
+#   q_mới(J3) = q_cũ − 90°, q_mới(J5) = q_cũ + 90° → giới hạn J3, J5 dời theo để giữ đúng dải cơ khí cũ.
+#   J3: dải cũ [-150, 150] → [-240, 60], rồi THU HẸP 15° mỗi phía theo yêu cầu an toàn → [-225, 45]
+#       (+ = cẳng tay chúc xuống; +45° là cẳng tay chúc 45° dưới phương ngang).
+#   J5: dải cũ [-110, 110] → [-20, 200] (0 = đầu hút thẳng xuống khi cẳng tay ngang; +90 = cổ tay thẳng).
 DEFAULT_JOINT_LIMITS_DEG: tuple[tuple[float, float], ...] = (
     (-170.0, 170.0),
-    (-90.0, 110.0),
-    (-150.0, 150.0),
+    (-102.5, 97.5),
+    (-220.0, 20.0),
     (-180.0, 180.0),
-    (-110.0, 110.0),
+    (-42.0, 178.0),
     (-360.0, 360.0),
 )
 
@@ -150,9 +155,15 @@ class RobotModel:
         self.flange_offset_m = float(flange_offset_m)
         self.foot_offset_m = float(foot_offset_m)
         self._limits_rad = np.radians(np.array(self.joint_limits, dtype=float))
+        self._original_limits = list(self.joint_limits)
         self.mesh_scale = 1.0
         # Ma trận đặt lại mesh STL của base_link + 6 khâu trước khi áp biến đổi khớp (xem dong_hoc_step.py)
         self.mesh_pretransforms = [np.eye(4) for _ in range(7)]
+        # Khớp bị KHÓA (22/11/2026: J2 cố định vì đai J2 yếu): {chỉ số 0..5: góc độ}. IK không dùng khớp này.
+        self.locked: dict[int, float] = {}
+        # Khi khóa khớp chỉ còn 4 bậc định vị đầu hút (J6 chỉ xoay quanh trục hút) → không ép được cả vị trí
+        # lẫn hướng thẳng đứng. Vị trí được ưu tiên tuyệt đối; trục hút được phép NGHIÊNG tối đa góc này.
+        self.max_tool_tilt_deg = 15.0
         self._build_frames()
 
     # -- dựng hệ base và tư thế TCP ở q = 0 (trong hệ CAD) --------------------
@@ -164,6 +175,12 @@ class RobotModel:
         )
         forward = wrist_center - origin
         x_axis = forward - (forward @ z_axis) * z_axis
+        if np.linalg.norm(x_axis) < 0.05:
+            # 22/11/2026: tư thế 0 = DỰNG THẲNG ĐỨNG → tâm cổ tay nằm ngay trên trục J1, không xác định được hướng
+            # "trước". Lấy hướng cẳng tay ở tư thế chữ L (J3 = +90°) để X base giữ đúng như trước (băng tải ở +X).
+            elbow = screw_transform(self.points[2], self.axes[2], math.radians(90.0))
+            forward = (elbow @ np.append(wrist_center, 1.0))[:3] - origin
+            x_axis = forward - (forward @ z_axis) * z_axis
         x_axis = _unit(x_axis)
         y_axis = np.cross(z_axis, x_axis)
         cad_from_base = np.eye(4)
@@ -249,6 +266,21 @@ class RobotModel:
     def clamp_rad(self, q_rad: np.ndarray) -> np.ndarray:
         return np.clip(q_rad, self._limits_rad[:, 0], self._limits_rad[:, 1])
 
+    def lock_joint(self, index: int, angle_deg: float | None) -> None:
+        """Khóa khớp `index` (0..5) ở `angle_deg`: giới hạn khớp đó thành [góc, góc]. None = mở khóa."""
+
+        if angle_deg is None:
+            self.locked.pop(index, None)
+            low, high = self._original_limits[index]
+        else:
+            lo0, hi0 = self._original_limits[index]
+            if not lo0 <= angle_deg <= hi0:
+                raise ValueError(f"Góc khóa J{index + 1} = {angle_deg}° ngoài giới hạn [{lo0}, {hi0}]")
+            self.locked[index] = float(angle_deg)
+            low = high = float(angle_deg)
+        self.joint_limits[index] = (float(low), float(high))
+        self._limits_rad = np.radians(np.array(self.joint_limits, dtype=float))
+
     # -- động học nghịch -------------------------------------------------------
     def solve_ik(
         self,
@@ -273,6 +305,26 @@ class RobotModel:
         target_p = np.asarray(position_m, dtype=float)
         target_z = _unit(np.asarray(approach, dtype=float)) if approach is not None else None
         seed = np.radians(np.asarray(seed_deg if seed_deg is not None else [0.0] * 6, dtype=float))
+        if self.locked and rotation is None:
+            best, tilt_min, best_dist = None, math.inf, math.inf
+            for start in self._seeds(seed, target_p):
+                q, info = self._ik_locked(start, target_p, target_z, position_tol_m, max_iterations)
+                if q is None:
+                    continue
+                tilt_min = min(tilt_min, info["tilt_deg"])
+                if info["tilt_deg"] > self.max_tool_tilt_deg:
+                    continue
+                # Trong các nghiệm đủ thẳng, chọn nghiệm GẦN tư thế hiện tại nhất (không lật cổ tay J4/J5)
+                dist = float(np.max(np.abs(q - seed)))
+                if dist < best_dist:
+                    best, best_dist = (q, info), dist
+            if best is not None:
+                return np.degrees(best[0]), best[1]
+            if tilt_min < math.inf:
+                return None, {"ok": False, "tilt_deg": tilt_min,
+                              "reason": f"J2 khóa ở {self.locked.get(1, 0):.1f}°: đầu hút phải nghiêng "
+                                        f"{tilt_min:.1f}° > {self.max_tool_tilt_deg:.0f}° cho phép"}
+            return None, {"ok": False, "reason": f"Ngoài vùng với khi khóa khớp {[i + 1 for i in self.locked]}"}
         for start in self._seeds(seed, target_p):
             q, info = self._dls(
                 start, target_p, rotation, target_z, position_tol_m, angle_tol_rad, max_iterations
@@ -280,6 +332,64 @@ class RobotModel:
             if q is not None:
                 return np.degrees(q), info
         return None, {"ok": False, "reason": "Ngoài vùng với hoặc vượt giới hạn khớp"}
+
+    def _ik_locked(self, start, target_p, target_z, pos_tol, max_iterations):
+        """IK ưu tiên 2 cấp khi có khớp khóa.
+
+        Cấp 1: vị trí TCP (bắt buộc đạt sai số pos_tol).
+        Cấp 2: trục hút gần `target_z` nhất có thể, chỉ dùng chuyển động trong KHÔNG GIAN NULL của cấp 1:
+            dq = J_p⁺ e_p + N (J_o N)⁺ (e_o − J_o J_p⁺ e_p),  N = I − J_p⁺ J_p
+        Cột Jacobian của khớp khóa = 0 nên khớp đó không bao giờ được yêu cầu chuyển động.
+        Trả (q_rad, info có 'tilt_deg') hoặc (None, {}).
+        """
+
+        q = self.clamp_rad(start.copy())
+        locked = list(self.locked)
+        damping = 0.02
+        best_tilt, last_gain = math.inf, 0
+        for iteration in range(max_iterations):
+            tcp = self.fk(q)
+            e_pos = target_p - tcp[:3, 3]
+            current_z = tcp[:3, 2]
+            jac = self.jacobian(q)
+            jac[:, locked] = 0.0
+            jp = jac[:3]
+            jp_pinv = jp.T @ np.linalg.inv(jp @ jp.T + damping**2 * np.eye(3))
+            # Phép chiếu null CHÍNH XÁC (pinv SVD, không damping) để cấp 2 không làm lệch vị trí
+            null = np.eye(6) - np.linalg.pinv(jp, rcond=1e-4) @ jp
+            if target_z is not None:
+                cross = np.cross(current_z, target_z)
+                tilt = math.atan2(float(np.linalg.norm(cross)), float(current_z @ target_z))
+                e_ang = _unit(cross) * tilt if np.linalg.norm(cross) > 1e-12 else np.zeros(3)
+                projector = np.eye(3) - np.outer(current_z, current_z)   # bỏ xoay quanh trục hút (J6 tự do)
+                jo = projector @ jac[3:]
+                jon = jo @ null
+                # damping lớn hơn cho cấp 2: chỉ còn ≈ 1 bậc tự do dư → tránh khuếch đại bước khi gần suy biến
+                jon_pinv = jon.T @ np.linalg.inv(jon @ jon.T + 0.1**2 * np.eye(3))
+                step = jp_pinv @ e_pos + 0.5 * null @ (jon_pinv @ e_ang)
+            else:
+                tilt = 0.0
+                step = jp_pinv @ e_pos
+            if tilt < best_tilt - math.radians(0.02):
+                best_tilt, last_gain = tilt, iteration
+            pos_ok = float(np.linalg.norm(e_pos)) < pos_tol
+            if pos_ok and (tilt < math.radians(0.3) or iteration - last_gain > 30):
+                if not self.within_limits_deg(np.degrees(q)):
+                    return None, {}
+                return q, {
+                    "ok": True,
+                    "iterations": iteration,
+                    "position_error_mm": float(np.linalg.norm(e_pos) * 1000),
+                    "angle_error_deg": math.degrees(tilt),
+                    "tilt_deg": math.degrees(tilt),
+                }
+            norm = float(np.linalg.norm(step))
+            if norm > 0.25:
+                step *= 0.25 / norm
+            q = self.clamp_rad(q + step)
+            for index in locked:
+                q[index] = math.radians(self.locked[index])
+        return None, {}
 
     def _seeds(self, seed: np.ndarray, target_p: np.ndarray) -> list[np.ndarray]:
         yaw = math.atan2(target_p[1], target_p[0])

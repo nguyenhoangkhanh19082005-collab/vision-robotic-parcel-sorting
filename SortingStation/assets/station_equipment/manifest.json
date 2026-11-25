@@ -1,0 +1,170 @@
+{
+ "note": "Xuất bởi robotarm-6-axis/src/cad/tram_step_3_xuat_tram.py — mm, hệ base robot. Đổi layout băng tải trong station.yaml thì chạy lại script này.",
+ "parts": [
+  {
+   "file": "Gia_Thanh_de_phia_cam_bien.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Gia_Chan_khung_1.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Gia_Thanh_ngang_tren.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Gia_Thanh_de_2.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Gia_Chan_khung_2.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Gia_Gia_cam_bien_M18.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Gia_Tay_don_webcam_den.stl",
+   "group": "Gia_camera_den_cam_bien",
+   "color": "#7a7f86"
+  },
+  {
+   "file": "Cam_bien_E18-D80NK.stl",
+   "group": "Cam_bien",
+   "color": "#f2b705"
+  },
+  {
+   "file": "Dai_oc_E18_1.stl",
+   "group": "Cam_bien",
+   "color": "#1b1d20"
+  },
+  {
+   "file": "Dai_oc_E18_2.stl",
+   "group": "Cam_bien",
+   "color": "#1b1d20"
+  },
+  {
+   "file": "Den_ring_vong.stl",
+   "group": "Den_ring",
+   "color": "#f4f4f4"
+  },
+  {
+   "file": "Webcam_C260 WebCam Assembly.stl",
+   "group": "Webcam",
+   "color": "#1b1d20"
+  },
+  {
+   "file": "Van_than_nhom.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#d9dde2"
+  },
+  {
+   "file": "Van_nap_trai.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#1f2328"
+  },
+  {
+   "file": "Van_dau_dan_huong.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#1f2328"
+  },
+  {
+   "file": "Van_cuon_dien_12V.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#1f2328"
+  },
+  {
+   "file": "Van_giac_cam_DIN.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#1f2328"
+  },
+  {
+   "file": "Van_ong_luon_cap.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#1f2328"
+  },
+  {
+   "file": "Noi_nhanh_PC602_A.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#c9a227"
+  },
+  {
+   "file": "Noi_nhanh_PC602_A_vong.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#2563eb"
+  },
+  {
+   "file": "Noi_nhanh_PC602_B.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#c9a227"
+  },
+  {
+   "file": "Noi_nhanh_PC602_B_vong.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#2563eb"
+  },
+  {
+   "file": "Noi_nhanh_PC602_P.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#c9a227"
+  },
+  {
+   "file": "Noi_nhanh_PC602_P_vong.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#2563eb"
+  },
+  {
+   "file": "Giam_thanh_BSL01_R.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#b08d57"
+  },
+  {
+   "file": "Giam_thanh_BSL01_S.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#b08d57"
+  },
+  {
+   "file": "Bom_de_in_3D.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#f4f4f4"
+  },
+  {
+   "file": "Bom_yen_do_6.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#f4f4f4"
+  },
+  {
+   "file": "Bom_yen_do_56.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#f4f4f4"
+  },
+  {
+   "file": "Bom_dau_bom.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#f4f4f4"
+  },
+  {
+   "file": "Bom_dong_co_370.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#b8bcc2"
+  },
+  {
+   "file": "Bom_num_ong_9.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#f4f4f4"
+  },
+  {
+   "file": "Bom_num_ong_25.stl",
+   "group": "Cum_giac_hut_bom_van",
+   "color": "#f4f4f4"
+  }
+ ]
+}

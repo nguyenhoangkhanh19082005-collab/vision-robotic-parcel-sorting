@@ -2,10 +2,11 @@
 
 Kế thừa ``machine_vision.ui.main_window.MainWindow`` và chỉ ghép thêm; KHÔNG sửa mã nguồn MachineVision:
 - Twin phần mềm cũ (robot hình que, không đúng động học) được thay bằng CellTwinView (mesh CAD).
-- Tab VẬN HÀNH: thêm twin thu gọn + thẻ phân loại cạnh camera → một màn hình thấy cả hai.
+- Trang Vận hành (2026-11-25): twin thu gọn + thẻ robot nằm trong cột "Chạy tự động"
+  (``operator_control_layout``), robot sáng ở bước 4 của dải hành trình kiện.
 - Tab ROBOT 6 TRỤC: nhúng nguyên GUI robot (jog, MoveL, kết nối USB/LAN, lưu gốc...).
 - Tab PHÂN LOẠI: bộ tuần tự gắp–thả theo kết quả Vision, dạy tư thế, kiểm tra tầm với.
-- Nút DỪNG TOÀN TRẠM luôn hiển thị (góc phải thanh tab).
+- Nút Dừng toàn trạm luôn hiển thị trên thanh tiêu đề (``header_actions``).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from machine_vision.ui.digital_twin import ProcessStage
 from machine_vision.ui.main_window import MainWindow, StatusPill
+from machine_vision.ui.station_theme import PALETTE as P
 from sorting_station import __version__
 from sorting_station.cell_state import CellLayout, CellState
 from sorting_station.cell_twin import CellTwinView
@@ -44,8 +46,8 @@ def _layout_containing(root_layout, widget):
 
 class IntegratedMainWindow(MainWindow):
     def __init__(self, mv_config: dict, pipeline, evidence, project_root: Path,
-                 station_config: dict, paths: StationPaths) -> None:
-        super().__init__(mv_config, pipeline, evidence, project_root=project_root)
+                 station_config: dict, paths: StationPaths, reporter=None) -> None:
+        super().__init__(mv_config, pipeline, evidence, project_root=project_root, reporter=reporter)
         self.station_config = station_config
         self.paths = paths
         robot_cfg = station_config.get("robot", {})
@@ -54,6 +56,10 @@ class IntegratedMainWindow(MainWindow):
             tool_length_m=float(robot_cfg.get("tool_length_mm", 30.0)) / 1000.0,
             scale=float(robot_cfg.get("scale", 1.0)),
         )
+        # 22/11/2026: J2 khóa cứng cơ khí → IK chỉ dùng J1, J3–J6 (xem robot.lock_j2_deg trong station.yaml)
+        if robot_cfg.get("lock_j2_deg") is not None:
+            self.model.max_tool_tilt_deg = float(robot_cfg.get("max_tool_tilt_deg", 15.0))
+            self.model.lock_joint(1, float(robot_cfg["lock_j2_deg"]))
         self.cell = CellState(
             CellLayout.from_config(station_config.get("layout", {})),
             telemetry_timeout_s=float(robot_cfg.get("telemetry_timeout_s", 0.5)),
@@ -84,25 +90,22 @@ class IntegratedMainWindow(MainWindow):
         old.hide()
         old.deleteLater()
         self.digital_twin = self.cell_twin  # mọi lời gọi của MV giờ đi vào CellState
-        self.twin_sync.setText("CAD + TELEMETRY")
-        self.twin_sync.setStyleSheet("color:#26a269; font-weight:700; font-size:10px;")
+        self.twin_sync.setText("Theo CAD và dữ liệu robot")
+        self.twin_sync.setStyleSheet(f"color:{P['pass']}; font-weight:600; font-size:11px;")
 
-        # Tab VẬN HÀNH: twin thu gọn thành cột riêng giữa camera và cột kết quả
-        right_panel = self.focus_metric.parentWidget()
-        frame = QFrame()
-        frame.setObjectName("panel")
-        frame_layout = QVBoxLayout(frame)
-        frame_layout.setContentsMargins(8, 8, 8, 8)
-        title = QLabel("DIGITAL TWIN TOÀN TRẠM · THỜI GIAN THỰC")
+        # Trang Vận hành: twin thu gọn trong cột "Chạy tự động", dưới các nút chạy
+        # (thay khoảng giãn cuối cột của MachineVision).
+        column = self.operator_control_layout
+        last = column.itemAt(column.count() - 1)
+        if last is not None and last.spacerItem() is not None:
+            column.takeAt(column.count() - 1)
+        title = QLabel("Mô hình trạm")
         title.setObjectName("sectionTitle")
-        frame_layout.addWidget(title)
+        self.operator_control_layout.addSpacing(6)
+        self.operator_control_layout.addWidget(title)
         self.cell_twin_compact = CellTwinView(self.cell, self.model, mesh_dir, compact=True)
-        frame_layout.addWidget(self.cell_twin_compact, 1)
-        self._twin_column = frame_layout  # thẻ phân loại được thêm vào dưới twin
-        body_layout = right_panel.parentWidget().layout()
-        body_layout.insertWidget(body_layout.indexOf(right_panel), frame, 5)
-        body_layout.setStretch(0, 6)  # camera
-        body_layout.setStretch(body_layout.indexOf(right_panel), 4)
+        self.operator_control_layout.addWidget(self.cell_twin_compact, 1)
+        self._twin_column = self.operator_control_layout  # thẻ robot thêm vào dưới twin
 
     def _install_sorting(self) -> None:
         settings = SortingSettings.from_config(self.station_config.get("sorting", {}))
@@ -123,37 +126,37 @@ class IntegratedMainWindow(MainWindow):
         robot_layout = QVBoxLayout(robot_page)
         robot_layout.setContentsMargins(0, 0, 0, 0)
         robot_layout.addWidget(self.robot_window)
-        self.robot_tab_index = self.workspace_tabs.addTab(robot_page, "ROBOT 6 TRỤC")
-        self.workspace_tabs.addTab(self.sorting_panel, "PHÂN LOẠI TỰ ĐỘNG")
+        self.robot_tab_index = self.workspace_tabs.addTab(robot_page, "Robot")
+        self.workspace_tabs.addTab(self.sorting_panel, "Phân loại && tư thế")
+        # Robot GUI (Qt Designer, dự án robotarm) dùng chung giao diện của trạm.
+        self.robot_window.setStyleSheet("")
 
-        self.estop_button = QPushButton("⛔ DỪNG TOÀN TRẠM")
+        self.estop_button = QPushButton("Dừng toàn trạm")
+        self.estop_button.setObjectName("danger")
         self.estop_button.setToolTip(
             "Gửi STOP tới robot (dừng động cơ, tắt bơm) và băng tải, hủy chu trình. "
             "Đây là lệnh phần mềm — KHÔNG thay thế nút dừng khẩn phần cứng."
         )
-        self.estop_button.setStyleSheet(
-            "background:#c62828; border:1px solid #ff8a80; color:white; font-weight:800; padding:6px 14px;"
-        )
         self.estop_button.clicked.connect(self.emergency_stop_all)
-        self.workspace_tabs.setCornerWidget(self.estop_button)
+        self.header_actions.addWidget(self.estop_button)
 
         # Thay trang ROBOT (slider mô phỏng độc lập) trong Inspector bằng bảng giám sát chỉ đọc
         mirror = QWidget()
         mirror_layout = QVBoxLayout(mirror)
         mirror_layout.setContentsMargins(8, 10, 8, 8)
-        heading = QLabel("ROBOT 6 TRỤC · GIÁM SÁT")
+        heading = QLabel("Robot 6 trục, chỉ xem")
         heading.setObjectName("sectionTitle")
         mirror_layout.addWidget(heading)
         self.robot_mirror_labels = []
         for joint in range(6):
             label = QLabel(f"J{joint + 1}: —")
-            label.setStyleSheet("background:#0d141d; padding:5px; color:#aebdca; font-family:Consolas;")
+            label.setStyleSheet(f"background:{P['bg']}; padding:5px; color:{P['text']}; font-family:Consolas;")
             mirror_layout.addWidget(label)
             self.robot_mirror_labels.append(label)
         self.robot_mirror_tcp = QLabel("TCP: —")
-        self.robot_mirror_tcp.setStyleSheet("color:#8fc1ff; font-family:Consolas;")
+        self.robot_mirror_tcp.setStyleSheet(f"color:{P['kraft']}; font-family:Consolas;")
         mirror_layout.addWidget(self.robot_mirror_tcp)
-        open_robot = QPushButton("MỞ TAB ROBOT 6 TRỤC")
+        open_robot = QPushButton("Mở tab Robot")
         open_robot.setObjectName("secondary")
         open_robot.clicked.connect(lambda: self.workspace_tabs.setCurrentIndex(self.robot_tab_index))
         mirror_layout.addWidget(open_robot)
@@ -162,11 +165,10 @@ class IntegratedMainWindow(MainWindow):
         self.inspector_tabs.insertTab(1, mirror, "ROBOT")
 
         # Trạng thái robot cạnh các trạng thái của MV
-        self.robot_status = StatusPill("ROBOT", "MÔ PHỎNG")
+        self.robot_status = StatusPill("Robot", "MÔ PHỎNG")
         statuses = _layout_containing(self.centralWidget().layout(), self.camera_status)
         if statuses is not None:
             statuses.insertWidget(statuses.indexOf(self.controller_status) + 1, self.robot_status)
-        self.controller_status.name.setText("BĂNG TẢI")
 
     def _connect_signals(self) -> None:
         robot = self.robot_window
@@ -180,17 +182,52 @@ class IntegratedMainWindow(MainWindow):
         self.workspace_tabs.currentChanged.connect(self._on_tab_changed)
 
     # ------------------------------------------------------------ hành vi
+    def _camera_cycle_running(self) -> bool:
+        return (
+            self.auto_thread is not None
+            and str(self.config.get("station_cycle", {}).get("trigger", "sensor")) == "camera"
+        )
+
     def _show_result(self, result) -> None:
         super()._show_result(result)
         classification = result.classification
+        # Camera cycle: the parcel is still under the camera; the robot starts when the
+        # pick sensor stops it (_on_parcel_at_pick), not now.
         self.sorting_controller.on_inspection(
             classification.decision.value,
             classification.destination_bin,
             classification.parcel.waybill_code,
+            start=not self._camera_cycle_running(),
         )
 
+    # -- MachineVision camera cycle hooks -------------------------------------------------
+    def _robot_takes_parcels(self) -> bool:
+        # Read from the cycle thread: plain attribute only.
+        return bool(self.sorting_controller.armed)
+
+    def _on_parcel_at_pick(self, result) -> None:
+        if not self.sorting_controller.armed:
+            super()._on_parcel_at_pick(result)  # operator lifts the parcel
+            return
+        classification = result.classification
+        started = self.sorting_controller.on_parcel_at_pick(
+            classification.decision.value, classification.destination_bin
+        )
+        if not started and self.auto_thread is not None:
+            # Robot refused (not homed, busy, planning error): stop the line.
+            self.auto_thread.request_stop()
+
     def _on_sequence_state(self, state: str) -> None:
+        if self.auto_thread is not None:
+            if state == "DONE":
+                self.auto_thread.notify_pick_done()  # belt may run to the next parcel
+            elif state == "FAULT":
+                self.auto_thread.request_stop()
         running = state == "RUNNING"
+        if running:
+            self.route.set_active(3, "Robot đang gắp và thả vào thùng")
+        elif state == "FAULT":
+            self.route.set_active(3, "Robot dừng do lỗi", "fault")
         if running:
             self.cell.set_process(ProcessStage.ROUTING, self.cell.decision)
         elif state == "DONE":

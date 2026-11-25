@@ -7,13 +7,14 @@ from time import perf_counter
 import cv2
 import numpy as np
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QColor, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -35,6 +36,7 @@ from machine_vision import __version__
 from machine_vision.imaging.focus import focus_peaking, is_acceptable
 from machine_vision.models import Decision, FocusMetrics, InspectionResult, PackageDetection
 from machine_vision.repositories.sorting_logs import SortingLogReporter
+from machine_vision.paths import runtime_root
 from machine_vision.services.evidence import EvidenceWriter
 from machine_vision.services.pipeline import FrameQualityError, VisionPipeline
 from machine_vision.ui.auto_cycle import AutoCycleThread
@@ -43,82 +45,26 @@ from machine_vision.ui.camera_worker import CameraWorker, FrameBuffer, TaskThrea
 from machine_vision.ui.conveyor_panel import ConveyorPanel
 from machine_vision.ui.digital_twin import DigitalTwinWidget, ProcessStage
 from machine_vision.ui.logo_calibration import LogoCalibrationDialog
+from machine_vision.ui.station_theme import (
+    DECISION_COLORS,
+    DECISION_TEXT,
+    DISPLAY,
+    PALETTE as P,
+    STATE_COLORS,
+    STATE_TEXT,
+    STYLE,
+    ProcessRoute,
+)
 
-STYLE = """
-QMainWindow, QWidget { background: #07111b; color: #d9e5f0;
-                       font-family: "Segoe UI"; font-size: 12px; }
-QFrame#panel { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-               stop:0 #101d2a, stop:1 #0c1722); border: 1px solid #21364a;
-               border-radius: 9px; }
-QFrame#topbar { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                stop:0 #101f2e, stop:1 #0b1722); border: 1px solid #21364a;
-                border-radius: 10px; }
-QFrame#statusbar { background: #0b1722; border: 1px solid #20364a; border-radius: 12px; }
-QFrame#subpanel { background: #0a151f; border: 1px solid #1d3143; border-radius: 8px; }
-QLabel#title { font-size: 18px; font-weight: 700; color: #f3f7fb; letter-spacing: 1px; }
-QLabel#subtitle { color: #7890a5; font-size: 10px; letter-spacing: 1px; }
-QLabel#sectionTitle { color: #c0cfdb; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
-QLabel#metricTitle { color: #7890a5; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
-QLabel#metricValue { color: #f4f8fc; font-size: 20px; font-weight: 700; }
-QLabel#metricUnit { color: #6f8497; font-size: 9px; }
-QLabel#fieldName { color: #71879a; font-size: 10px; }
-QLabel#fieldValue { color: #e1eaf2; font-weight: 600; }
-QLabel#assetReady { color: #54c793; background: rgba(38,162,105,28); border-radius: 5px;
-                    padding: 4px 7px; font-size: 10px; font-weight: 700; }
-QLabel#assetWaiting { color: #e0ad47; background: rgba(210,153,34,28); border-radius: 5px;
-                      padding: 4px 7px; font-size: 10px; font-weight: 700; }
-QLabel#reasonBox { background: #09141f; color: #9eb0bf; border: 1px solid #1e3245;
-                   border-radius: 6px; padding: 7px; }
-QPushButton { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-              stop:0 #388cf5, stop:1 #2474d6); color: white; border: 1px solid #4b98f3;
-              border-radius: 6px; padding: 8px 13px; font-weight: 600; }
-QPushButton:hover { background: #4897f4; border-color: #78b2f7; }
-QPushButton:pressed { background: #1c67bd; }
-QPushButton:disabled { background: #1a2a39; border-color: #263b4d; color: #5f7486; }
-QPushButton#secondary { background: #142535; color: #bdcad5; border: 1px solid #2a4257; }
-QPushButton#secondary:hover { background: #1b3043; border-color: #3b5a73; }
-QPushButton#viewPreset { background: #102131; color: #aebdca; border: 1px solid #2a4257;
-                         border-radius: 6px; padding: 6px 8px; font-size: 10px; }
-QPushButton#viewPreset:hover { background: #183049; border-color: #48739a; color: #e6f1f9; }
-QPushButton#viewPreset:checked { background: #1c5f98; border-color: #62aaf0; color: white; }
-QTableWidget { background: #09141f; alternate-background-color: #0d1a26;
-               gridline-color: transparent; border: 1px solid #21364a;
-               border-radius: 7px; selection-background-color: #173e66; }
-QHeaderView::section { background: #122333; color: #8499aa; padding: 7px;
-                       border: 0; border-bottom: 1px solid #284055; font-size: 10px; }
-QCheckBox { color: #a9bac8; spacing: 7px; }
-QCheckBox::indicator { width: 15px; height: 15px; }
-QLineEdit, QSpinBox { background:#0b1722; color:#e1eaf2; border:1px solid #294157;
-                       border-radius:5px; padding:5px; }
-QTreeWidget { background: transparent; border: 0; color: #aebdca; outline: 0;
-              alternate-background-color: #0d1a26; }
-QTreeWidget::item { min-height: 27px; border-radius: 4px; }
-QTreeWidget::item:hover { background: #102333; }
-QTreeWidget::item:selected { background: #163a5d; color: #edf6ff; }
-QSplitter::handle { background: transparent; width: 6px; }
-QTabWidget::pane { border: 1px solid #21364a; background: #09141f; border-radius: 7px; }
-QTabBar::tab { background: transparent; color: #758b9e; padding: 9px 18px;
-               border: 0; border-bottom: 2px solid transparent; font-weight: 600; }
-QTabBar::tab:hover { color: #b9c8d4; background: #0e1d2a; }
-QTabBar::tab:selected { color: #eaf2f8; background: #102131; border-bottom: 2px solid #3b92f6; }
-QTabWidget#inspectorTabs QTabBar::tab { padding: 7px 8px; font-size: 9px; }
-QSlider::groove:horizontal { height: 4px; background: #1b3042; border-radius: 2px; }
-QSlider::sub-page:horizontal { background: #287edc; border-radius: 2px; }
-QSlider::handle:horizontal { width: 14px; margin: -5px 0; background: #63a9f7;
-                             border: 1px solid #a2cef9; border-radius: 7px; }
-QScrollBar:vertical { background: #09141f; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: #294157; min-height: 28px; border-radius: 5px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-"""
 
 
 class VideoCanvas(QLabel):
     def __init__(self) -> None:
-        super().__init__("CAMERA OFFLINE\nChọn KẾT NỐI CAMERA để bắt đầu")
+        super().__init__("Camera chưa kết nối\nBấm Kết nối camera để bắt đầu")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMinimumSize(480, 260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet("background:#05090d; border:1px solid #263542; color:#607283;")
+        self.setStyleSheet(f"background:#0d1312; border:1px solid {P['line']}; color:{P['faint']};")
 
     def show_frame(self, frame: np.ndarray, roi: list[float] | None = None) -> None:
         display = frame.copy()
@@ -140,65 +86,58 @@ class VideoCanvas(QLabel):
 
 
 class MetricCard(QFrame):
+    """One shift figure: label, big number (Bahnschrift), unit. ``accent`` colours the number."""
+
     def __init__(
-        self, title: str, value: str = "—", unit: str = "", accent: str = "#3b92f6"
+        self, title: str, value: str = "—", unit: str = "", accent: str | None = None
     ) -> None:
         super().__init__()
-        self.setObjectName("panel")
+        self.setObjectName("metric")
+        self.setStyleSheet("QFrame#metric { background: transparent; border: 0; }")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 7, 12, 8)
-        layout.setSpacing(1)
-        accent_bar = QFrame()
-        accent_bar.setFixedHeight(3)
-        accent_bar.setStyleSheet(f"background:{accent}; border-radius:1px;")
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(0)
         label = QLabel(title)
         label.setObjectName("metricTitle")
         self.value = QLabel(value)
         self.value.setObjectName("metricValue")
+        if accent:
+            self.value.setStyleSheet(f"color:{accent};")
         self.unit = QLabel(unit)
         self.unit.setObjectName("metricUnit")
-        layout.addWidget(accent_bar)
-        layout.addSpacing(3)
         layout.addWidget(label)
         layout.addWidget(self.value)
         layout.addWidget(self.unit)
-        self.setMaximumHeight(76)
 
 
 class StatusPill(QFrame):
-    COLORS = {
-        "ONLINE": "#26a269",
-        "READY": "#26a269",
-        "OFFLINE": "#f85149",
-        "FAULT": "#f85149",
-        "NOT CONFIGURED": "#d29922",
-        "LOCAL": "#2f81f7",
-        "LOCAL TEST": "#2f81f7",
-        "BYPASSED": "#d29922",
-    }
+    """Link state in the header: dot, name, state (codes stay English, display Vietnamese)."""
+
+    COLORS = STATE_COLORS
 
     def __init__(self, name: str, state: str) -> None:
         super().__init__()
         self.setObjectName("statusbar")
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(9, 5, 9, 5)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         self.dot = QLabel()
         self.dot.setFixedSize(8, 8)
         self.name = QLabel(name)
-        self.name.setStyleSheet("color:#7f91a3; font-size:10px; font-weight:600;")
+        self.name.setStyleSheet(f"color:{P['muted']}; font-size:12px; background:transparent;")
         self.state = QLabel()
-        self.state.setStyleSheet("font-size:10px; font-weight:700;")
         layout.addWidget(self.dot)
         layout.addWidget(self.name)
         layout.addWidget(self.state)
+        self.code = state
         self.set_state(state)
 
     def set_state(self, state: str) -> None:
-        color = self.COLORS.get(state, "#8b9aab")
+        self.code = state
+        color = self.COLORS.get(state, P["muted"])
         self.dot.setStyleSheet(f"background:{color}; border-radius:4px;")
-        self.state.setText(state)
-        self.state.setStyleSheet(f"color:{color}; font-size:10px; font-weight:700;")
+        self.state.setText(STATE_TEXT.get(state, state.lower() if state.isupper() else state))
+        self.state.setStyleSheet(f"color:{color}; font-size:12px; font-weight:600; background:transparent;")
 
 
 class MainWindow(QMainWindow):
@@ -231,6 +170,10 @@ class MainWindow(QMainWindow):
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self._update_clock)
         self.clock_timer.start(1000)
+        # Background upload (repositories/sorting_logs.py): show its state, not per parcel.
+        self.upload_timer = QTimer(self)
+        self.upload_timer.timeout.connect(self._refresh_upload_status)
+        self.upload_timer.start(2000)
         self._inspection_started = 0.0
         self.total_count = 0
         self.qr_success_count = 0
@@ -258,57 +201,49 @@ class MainWindow(QMainWindow):
         self._build_ui()
 
     def _build_ui(self) -> None:
+        """One operator screen for the whole station (2026-11-25 redesign).
+
+        Header: station name, link states, clock, station-wide actions (``header_actions``).
+        Route strip: where the current parcel is (``self.route``).
+        "Vận hành": camera | automatic run (``operator_control_layout``, the integrated
+        station adds the 3D cell and the robot card here) | last parcel + shift figures,
+        log below. Engineering tools live in the other tabs.
+        """
         root = QWidget()
         main = QVBoxLayout(root)
-        main.setContentsMargins(14, 12, 14, 12)
-        main.setSpacing(10)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
 
         topbar = QFrame()
         topbar.setObjectName("topbar")
         header = QHBoxLayout(topbar)
-        header.setContentsMargins(10, 8, 10, 8)
+        header.setContentsMargins(16, 10, 16, 10)
+        header.setSpacing(12)
         brand = QLabel("MV")
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        brand.setFixedSize(42, 42)
+        brand.setFixedSize(38, 38)
         brand.setStyleSheet(
-            "background:#2f81e5; color:white; border-radius:10px; font-size:15px; font-weight:800;"
+            f"background:{P['kraft']}; color:{P['ink']}; border-radius:3px;"
+            f"font-family:'{DISPLAY}'; font-size:15px; font-weight:700;"
         )
         header.addWidget(brand)
-        titles = QVBoxLayout()
-        titles.setSpacing(1)
-        title = QLabel("MV-01  /  PARCEL INSPECTION CELL")
+        title = QLabel("Trạm phân loại kiện hàng")
         title.setObjectName("title")
-        subtitle = QLabel("CAMERA 2K  •  QR  •  LOGO  •  PACKAGE DAMAGE  •  SORTING")
-        subtitle.setObjectName("subtitle")
-        titles.addWidget(title)
-        titles.addWidget(subtitle)
-        header.addLayout(titles)
-        header.addStretch()
-        self.clock_label = QLabel()
-        self.clock_label.setStyleSheet("color:#b8c5d1; font-weight:600;")
-        header.addWidget(self.clock_label)
-        self.mode_label = QLabel("VISION MANUAL")
-        self.mode_label.setStyleSheet(
-            "background:#142f49; color:#73b6fa; border:1px solid #285078;"
-            "border-radius:10px; padding:6px 11px; font-weight:700;"
-        )
-        header.addWidget(self.mode_label)
-        main.addWidget(topbar)
-        self._update_clock()
-
-        statuses = QHBoxLayout()
-        statuses.setSpacing(8)
-        self.camera_status = StatusPill("CAMERA", "OFFLINE")
-        self.vision_status = StatusPill("VISION", "READY")
-        self.controller_status = StatusPill("CONTROLLER", "NOT CONFIGURED")
+        header.addWidget(title)
+        header.addSpacing(24)
+        self.camera_status = StatusPill("Camera", "OFFLINE")
+        self.vision_status = StatusPill("Vision", "READY")
+        self.controller_status = StatusPill("Băng tải", "NOT CONFIGURED")
         self.data_status = StatusPill(
-            "DATA", "LOCAL TEST" if self.local_test_mode else "LOCAL"
+            "Dữ liệu", "LOCAL TEST" if self.local_test_mode else "LOCAL"
         )
         if self.reporter is not None:
             remote_state = "READY"
         else:
             remote_state = "BYPASSED" if self.local_test_mode else "NOT CONFIGURED"
-        self.remote_status = StatusPill("SUPABASE", remote_state)
+        self.remote_status = StatusPill("Web", remote_state)
+        self.status_layout = QHBoxLayout()
+        self.status_layout.setSpacing(18)
         for status in (
             self.camera_status,
             self.vision_status,
@@ -316,57 +251,59 @@ class MainWindow(QMainWindow):
             self.data_status,
             self.remote_status,
         ):
-            statuses.addWidget(status)
-        statuses.addStretch()
-        main.addLayout(statuses)
-
-        kpis = QHBoxLayout()
-        kpis.setSpacing(8)
-        self.throughput_metric = MetricCard(
-            "TOTAL PROCESSED", "0", "kiện trong phiên", "#3b92f6"
+            self.status_layout.addWidget(status)
+        header.addLayout(self.status_layout)
+        header.addStretch()
+        self.mode_label = QLabel()
+        self.mode_label.hide()
+        header.addWidget(self.mode_label)
+        self.clock_label = QLabel()
+        self.clock_label.setStyleSheet(
+            f"color:{P['muted']}; font-family:'{DISPLAY}'; font-size:15px; background:transparent;"
         )
-        self.success_metric = MetricCard("SCAN SUCCESS", "—", "%", "#6aa9df")
-        self.pass_metric = MetricCard("PASS", "0", "kiện trong ca", "#26a269")
-        self.reject_metric = MetricCard("REJECT", "0", "kiện lỗi", "#f85149")
-        self.cycle_metric = MetricCard("CYCLE TIME", "—", "ms / kiện", "#d29922")
-        for metric in (
-            self.throughput_metric,
-            self.success_metric,
-            self.pass_metric,
-            self.reject_metric,
-            self.cycle_metric,
-        ):
-            kpis.addWidget(metric, 1)
-        main.addLayout(kpis)
+        header.addWidget(self.clock_label)
+        self.header_actions = QHBoxLayout()
+        self.header_actions.setSpacing(8)
+        header.addLayout(self.header_actions)
+        main.addWidget(topbar)
+
+        self.route = ProcessRoute()
+        main.addWidget(self.route)
+
+        self.throughput_metric = MetricCard("Đã kiểm tra", "0", "kiện trong phiên")
+        self.success_metric = MetricCard("Đọc được QR", "—", "% số kiện", P["info"])
+        self.pass_metric = MetricCard("Đạt", "0", "kiện", P["pass"])
+        self.reject_metric = MetricCard("Loại", "0", "kiện", P["reject"])
+        self.cycle_metric = MetricCard("Thời gian kiểm tra", "—", "ms mỗi kiện", P["kraft"])
 
         operator_page = QWidget()
         operator_layout = QVBoxLayout(operator_page)
-        operator_layout.setContentsMargins(0, 0, 0, 0)
-        operator_layout.setSpacing(8)
+        operator_layout.setContentsMargins(14, 12, 14, 12)
+        operator_layout.setSpacing(10)
+        body = QHBoxLayout()
+        body.setSpacing(10)
 
-        body = QWidget()
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(8)
+        # -- camera ------------------------------------------------------------------
         camera_panel = QFrame()
         camera_panel.setObjectName("panel")
         camera_layout = QVBoxLayout(camera_panel)
-        camera_layout.setContentsMargins(10, 10, 10, 10)
+        camera_layout.setContentsMargins(12, 10, 12, 12)
+        camera_layout.setSpacing(8)
         camera_header = QHBoxLayout()
-        self.camera_title = QLabel("LIVE VISION / PHÁT HIỆN KIỆN HÀNG")
+        self.camera_title = QLabel("Camera trực tiếp")
         self.camera_title.setObjectName("sectionTitle")
-        self.frame_state = QLabel("WAITING")
-        self.frame_state.setStyleSheet("color:#8c9bab; font-weight:700;")
+        self.frame_state = QLabel("Chờ")
+        self.frame_state.setStyleSheet(f"color:{P['muted']}; font-weight:700;")
         camera_header.addWidget(self.camera_title)
         camera_header.addStretch()
         self.camera_view_group = QButtonGroup(self)
         self.camera_view_group.setExclusive(True)
-        self.live_view_button = QPushButton("LIVE")
+        self.live_view_button = QPushButton("Trực tiếp")
         self.live_view_button.setObjectName("viewPreset")
         self.live_view_button.setCheckable(True)
         self.live_view_button.setChecked(True)
         self.live_view_button.clicked.connect(self._show_live_view)
-        self.snapshot_view_button = QPushButton("ẢNH KIỂM TRA")
+        self.snapshot_view_button = QPushButton("Ảnh kiểm tra")
         self.snapshot_view_button.setObjectName("viewPreset")
         self.snapshot_view_button.setCheckable(True)
         self.snapshot_view_button.setEnabled(False)
@@ -375,99 +312,119 @@ class MainWindow(QMainWindow):
         self.camera_view_group.addButton(self.snapshot_view_button)
         camera_header.addWidget(self.live_view_button)
         camera_header.addWidget(self.snapshot_view_button)
+        camera_header.addSpacing(8)
         camera_header.addWidget(self.frame_state)
         camera_layout.addLayout(camera_header)
         self.video_stack = QStackedWidget()
         self.video = VideoCanvas()
         self.snapshot_video = VideoCanvas()
-        self.snapshot_video.setText("CHƯA CÓ ẢNH KIỂM TRA")
+        self.snapshot_video.setText("Chưa có ảnh kiểm tra")
         self.video_stack.addWidget(self.video)
         self.video_stack.addWidget(self.snapshot_video)
         camera_layout.addWidget(self.video_stack, 1)
 
-        controls = QGridLayout()
-        controls.setHorizontalSpacing(8)
-        controls.setVerticalSpacing(5)
-        self.connect_button = QPushButton("KẾT NỐI CAMERA")
+        self.connect_button = QPushButton("Kết nối camera")
         self.connect_button.setObjectName("secondary")
         self.connect_button.clicked.connect(self.toggle_camera)
-        self.inspect_button = QPushButton("KIỂM TRA KIỆN")
+        self.inspect_button = QPushButton("Kiểm tra tay")
+        self.inspect_button.setObjectName("secondary")
+        self.inspect_button.setToolTip("Chụp và kiểm tra kiện đang nằm dưới camera, không chạy băng tải")
         self.inspect_button.setEnabled(False)
         self.inspect_button.clicked.connect(self.inspect)
-        self.bench_check = QCheckBox("BENCH 15–30 CM")
+        self.background_button = QPushButton("Chụp nền trống")
+        self.background_button.setObjectName("secondary")
+        self.background_button.setEnabled(False)
+        self.background_button.setToolTip(
+            "Bỏ kiện khỏi khung hình rồi chụp băng tải trống. Camera dùng ảnh này để biết lúc kiện "
+            "nằm trọn khung hình; chụp lại mỗi khi camera, đèn hoặc băng tải bị xê dịch."
+        )
+        self.background_button.clicked.connect(self._capture_bench_background)
+        camera_tools = QHBoxLayout()
+        camera_tools.setSpacing(8)
+        camera_tools.addWidget(self.connect_button)
+        camera_tools.addWidget(self.inspect_button)
+        camera_tools.addWidget(self.background_button)
+        camera_tools.addStretch()
+        camera_layout.addLayout(camera_tools)
+        body.addWidget(camera_panel, 11)
+
+        # Engineering camera tools (tab "Băng tải & camera").
+        self.bench_check = QCheckBox("Chế độ bàn thử 15–30 cm")
         self.bench_check.setToolTip(
             "Chế độ thử tạm khi camera đặt trên bàn/sàn, kiện đứng yên ở 15–30 cm. "
             "Tắt chế độ này khi lắp camera lên băng tải."
         )
         self.bench_check.setChecked(self.pipeline.bench_mode)
         self.bench_check.toggled.connect(self._set_bench_mode)
-        self.background_button = QPushButton("CHỤP NỀN TRỐNG")
-        self.background_button.setObjectName("secondary")
-        self.background_button.setEnabled(False)
-        self.background_button.setToolTip(
-            "Bỏ kiện khỏi khung hình rồi chụp bối cảnh trống làm mốc kiểm tra móp, méo, thủng."
-        )
-        self.background_button.clicked.connect(self._capture_bench_background)
-        self.logo_calibration_button = QPushButton("LẤY MẪU LOGO")
+        self.logo_calibration_button = QPushButton("Lấy mẫu logo")
         self.logo_calibration_button.setObjectName("secondary")
         self.logo_calibration_button.setEnabled(False)
         self.logo_calibration_button.setToolTip(
             "Chụp nhãn thực tế, kéo chọn logo và lưu template nhận diện mới."
         )
         self.logo_calibration_button.clicked.connect(self._open_logo_calibration)
-        self.focus_check = QCheckBox("Focus peaking")
+        self.focus_check = QCheckBox("Tô viền vùng nét (focus peaking)")
         self.focus_check.toggled.connect(self._set_focus_overlay)
-        controls.addWidget(self.connect_button, 0, 0)
-        controls.addWidget(self.inspect_button, 0, 1)
-        controls.addWidget(self.logo_calibration_button, 0, 2)
-        controls.addWidget(self.bench_check, 1, 0)
-        controls.addWidget(self.background_button, 1, 1)
-        controls.addWidget(self.focus_check, 1, 2)
-        controls.setColumnStretch(3, 1)
-        camera_layout.addLayout(controls)
-        body_layout.addWidget(camera_panel, 7)
+        self.focus_metric = MetricCard("Độ nét Laplacian", unit="độ nét")
+        self.tenengrad_metric = MetricCard("Độ nét Tenengrad", unit="gradient")
+        self.motion_metric = MetricCard("Chuyển động", unit="pixel delta", accent=P["review"])
+        self.quality_metric = MetricCard("Điều kiện chụp", unit="sẵn sàng / giữ")
 
-        right_panel = QWidget()
-        sidebar = QVBoxLayout(right_panel)
-        sidebar.setContentsMargins(0, 0, 0, 0)
-        sidebar.setSpacing(8)
-        twin_panel = QFrame()
-        twin_panel.setObjectName("panel")
-        twin_layout = QVBoxLayout(twin_panel)
-        twin_header = QHBoxLayout()
-        twin_title = QLabel("DIGITAL TWIN 3D / FULL SYSTEM")
-        twin_title.setObjectName("sectionTitle")
-        self.twin_sync = QLabel("LOCAL MODEL")
-        self.twin_sync.setStyleSheet("color:#d29922; font-weight:700; font-size:10px;")
-        twin_header.addWidget(twin_title)
-        twin_header.addStretch()
-        twin_header.addWidget(self.twin_sync)
-        twin_layout.addLayout(twin_header)
-        self.digital_twin = DigitalTwinWidget()
-        twin_layout.addWidget(self.digital_twin)
-        metrics = QGridLayout()
-        metrics.setSpacing(8)
-        self.focus_metric = MetricCard("LAPLACIAN", unit="độ nét", accent="#3b92f6")
-        self.tenengrad_metric = MetricCard("TENENGRAD", unit="gradient", accent="#3b92f6")
-        self.motion_metric = MetricCard("MOTION", unit="pixel delta", accent="#d29922")
-        self.quality_metric = MetricCard(
-            "QUALITY GATE", unit="điều kiện chụp", accent="#26a269"
+        # -- automatic run -------------------------------------------------------------------
+        control_panel = QFrame()
+        control_panel.setObjectName("panel")
+        self.operator_control_layout = QVBoxLayout(control_panel)
+        self.operator_control_layout.setContentsMargins(12, 10, 12, 12)
+        self.operator_control_layout.setSpacing(8)
+        control_title = QLabel("Chạy tự động")
+        control_title.setObjectName("sectionTitle")
+        self.operator_control_layout.addWidget(control_title)
+        self.auto_button = QPushButton()
+        self.auto_button.setToolTip(
+            "Camera dừng kiện để kiểm tra QR, tem, logo -> kiện đạt chạy tới điểm gắp, "
+            "kiện lỗi rơi xuống sọt lỗi -> kết quả lưu lên web. Cần camera đã kết nối."
         )
-        metrics.addWidget(self.focus_metric, 0, 0)
-        metrics.addWidget(self.tenengrad_metric, 0, 1)
-        metrics.addWidget(self.motion_metric, 1, 0)
-        metrics.addWidget(self.quality_metric, 1, 1)
-        sidebar.addLayout(metrics)
+        self.auto_button.clicked.connect(self._toggle_auto_cycle)
+        self._set_auto_button(False)
+        self.operator_control_layout.addWidget(self.auto_button)
+        # 2026-11-25: without a robot the PASS parcel stops past the pick sensor (delayed
+        # AUTO stop), so nothing sees it being lifted: the belt waits for this button.
+        self.picked_button = QPushButton("Đã lấy kiện  (phím Space)")
+        self.picked_button.setObjectName("confirm")
+        self.picked_button.setShortcut("Space")
+        self.picked_button.setEnabled(False)
+        self.picked_button.setToolTip("Nhấc kiện ở điểm gắp ra rồi bấm để băng tải chạy tiếp")
+        self.picked_button.clicked.connect(self._confirm_manual_pick)
+        self.operator_control_layout.addWidget(self.picked_button)
+        self.auto_phase = "IDLE"
+        self.auto_status = QLabel("Chu trình tự động chưa chạy")
+        self.auto_status.setWordWrap(True)
+        self.auto_status.setStyleSheet(f"color:{P['muted']}; font-size:12px;")
+        self.operator_control_layout.addWidget(self.auto_status)
+        speed = (self.config.get("station_cycle") or {}).get("speed")
+        if speed:
+            belt_hint = QLabel(f"Băng tải chạy cố định PWM {speed} khi tự động")
+            belt_hint.setObjectName("hint")
+            self.operator_control_layout.addWidget(belt_hint)
+        # Last item: the integrated station replaces it with the 3D cell + robot card.
+        self.operator_control_layout.addStretch(1)
+        body.addWidget(control_panel, 5)
 
+        # -- last parcel + shift ----------------------------------------------------------
+        result_column = QVBoxLayout()
+        result_column.setSpacing(10)
         result_panel = QFrame()
         result_panel.setObjectName("panel")
         result_layout = QVBoxLayout(result_panel)
-        result_title = QLabel("CURRENT PARCEL / KẾT QUẢ GẦN NHẤT")
+        result_layout.setContentsMargins(12, 10, 12, 12)
+        result_layout.setSpacing(8)
+        result_title = QLabel("Kiện vừa kiểm tra")
         result_title.setObjectName("sectionTitle")
         result_layout.addWidget(result_title)
-        self.decision_label = QLabel("WAITING")
+        self.decision_label = QLabel("Chưa có kiện")
         self.decision_label.setStyleSheet(
-            "font-size:23px; font-weight:800; color:#8296b0; padding:2px 0 5px 0;"
+            f"font-family:'{DISPLAY}'; font-size:26px; font-weight:600; color:{P['faint']};"
+            "padding:4px 0;"
         )
         self.waybill_label = QLabel("—")
         self.qr_payload_label = QLabel("—")
@@ -475,23 +432,20 @@ class MainWindow(QMainWindow):
         self.damage_label = QLabel("—")
         self.destination_label = QLabel("—")
         self.background_status_label = QLabel("—")
-        self.reason_label = QLabel("Chưa có sản phẩm")
+        self.reason_label = QLabel("Kiện đầu tiên sẽ hiện ở đây sau khi camera kiểm tra.")
         self.reason_label.setWordWrap(True)
         self.reason_label.setObjectName("reasonBox")
         result_layout.addWidget(self.decision_label)
         result_grid = QGridLayout()
-        result_grid.setHorizontalSpacing(10)
+        result_grid.setHorizontalSpacing(12)
         result_grid.setVerticalSpacing(6)
         result_fields = (
-            ("MÃ VẬN ĐƠN", self.waybill_label),
-            ("QR PAYLOAD", self.qr_payload_label),
-            ("LOGO", self.logo_label),
-            ("TÌNH TRẠNG KIỆN", self.damage_label),
-            (
-                "KẾT QUẢ LOCAL" if self.local_test_mode else "RỔ ĐÍCH",
-                self.destination_label,
-            ),
-            ("NỀN DAMAGE", self.background_status_label),
+            ("Mã vận đơn", self.waybill_label),
+            ("Nội dung QR", self.qr_payload_label),
+            ("Logo", self.logo_label),
+            ("Tình trạng kiện", self.damage_label),
+            ("Kết quả" if self.local_test_mode else "Sọt đích", self.destination_label),
+            ("Ảnh nền camera", self.background_status_label),
         )
         for row, (name, value) in enumerate(result_fields):
             field_name = QLabel(name)
@@ -503,11 +457,31 @@ class MainWindow(QMainWindow):
         result_grid.setColumnStretch(1, 1)
         result_layout.addLayout(result_grid)
         result_layout.addWidget(self.reason_label)
-        sidebar.addWidget(result_panel)
-        body_layout.addWidget(right_panel, 3)
-        operator_layout.addWidget(body, 1)
+        result_column.addWidget(result_panel)
 
-        tabs = QTabWidget()
+        shift_panel = QFrame()
+        shift_panel.setObjectName("panel")
+        shift_layout = QVBoxLayout(shift_panel)
+        shift_layout.setContentsMargins(12, 10, 12, 10)
+        shift_title = QLabel("Ca làm việc")
+        shift_title.setObjectName("sectionTitle")
+        shift_layout.addWidget(shift_title)
+        shift_grid = QGridLayout()
+        shift_grid.setHorizontalSpacing(16)
+        shift_grid.setVerticalSpacing(6)
+        for index, metric in enumerate((
+            self.throughput_metric, self.pass_metric, self.reject_metric,
+            self.success_metric, self.cycle_metric,
+        )):
+            shift_grid.addWidget(metric, index // 3, index % 3)
+        shift_layout.addLayout(shift_grid)
+        result_column.addWidget(shift_panel)
+        body.addLayout(result_column, 6)
+        operator_layout.addLayout(body, 1)
+        # The parcel log continues "Kiện vừa kiểm tra": same column, below it (added
+        # after it is built, see log_tabs).
+
+        log_tabs = QTabWidget()
         self.history = QTableWidget(0, 6)
         self.history.setHorizontalHeaderLabels(
             [
@@ -515,51 +489,71 @@ class MainWindow(QMainWindow):
                 "Mã vận đơn",
                 "QR",
                 "Quyết định",
-                "Kết quả local" if self.local_test_mode else "Rổ",
+                "Kết quả" if self.local_test_mode else "Sọt",
                 "Lý do",
             ]
         )
         self.history.horizontalHeader().setStretchLastSection(True)
         self.history.verticalHeader().setVisible(False)
-        self.history.verticalHeader().setDefaultSectionSize(27)
+        self.history.verticalHeader().setDefaultSectionSize(26)
         self.history.setShowGrid(False)
         self.history.setAlternatingRowColors(True)
-        self.history.setMaximumHeight(165)
         self.alarms = QTableWidget(1, 3)
         self.alarms.setHorizontalHeaderLabels(["Mức độ", "Nguồn", "Thông báo"])
         self.alarms.horizontalHeader().setStretchLastSection(True)
         self.alarms.verticalHeader().setVisible(False)
-        self.alarms.verticalHeader().setDefaultSectionSize(27)
+        self.alarms.verticalHeader().setDefaultSectionSize(26)
         self.alarms.setShowGrid(False)
-        self.alarms.setItem(0, 0, QTableWidgetItem("WARNING"))
-        self.alarms.setItem(0, 1, QTableWidgetItem("REMOTE"))
+        self.alarms.setItem(0, 0, QTableWidgetItem("Cảnh báo"))
+        self.alarms.setItem(0, 1, QTableWidgetItem("Giám sát từ xa"))
         self.alarms.setItem(0, 2, QTableWidgetItem("Kênh giám sát từ xa chưa được cấu hình"))
-        tabs.addTab(self.history, "EVENT LOG")
-        tabs.addTab(self.alarms, "ALARMS (1)")
-        tabs.setMaximumHeight(145)
-        operator_layout.addWidget(tabs)
+        log_tabs.addTab(self.history, "Các kiện trước")
+        log_tabs.addTab(self.alarms, "Cảnh báo")
+        # Narrow column: time, waybill, decision, bin; QR and reason show as a tooltip.
+        self.history.setColumnHidden(2, True)
+        self.history.setColumnHidden(5, True)
+        header_view = self.history.horizontalHeader()
+        header_view.setStretchLastSection(False)
+        header_view.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.history.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        result_column.addWidget(log_tabs, 1)
+
+        # -- 3D model -------------------------------------------------------------------------
+        twin_panel = QFrame()
+        twin_panel.setObjectName("panel")
+        twin_layout = QVBoxLayout(twin_panel)
+        twin_header = QHBoxLayout()
+        twin_title = QLabel("Mô hình 3D toàn trạm")
+        twin_title.setObjectName("sectionTitle")
+        self.twin_sync = QLabel("Mô hình cục bộ")
+        self.twin_sync.setStyleSheet(f"color:{P['review']}; font-weight:600; font-size:11px;")
+        twin_header.addWidget(twin_title)
+        twin_header.addStretch()
+        twin_header.addWidget(self.twin_sync)
+        twin_layout.addLayout(twin_header)
+        self.digital_twin = DigitalTwinWidget()
+        twin_layout.addWidget(self.digital_twin)
 
         twin_page = QWidget()
         twin_page_layout = QVBoxLayout(twin_page)
-        twin_page_layout.setContentsMargins(0, 0, 0, 0)
+        twin_page_layout.setContentsMargins(14, 12, 14, 12)
         twin_page_layout.setSpacing(8)
-
         twin_command_bar = QFrame()
         twin_command_bar.setObjectName("subpanel")
         command_layout = QHBoxLayout(twin_command_bar)
         command_layout.setContentsMargins(10, 7, 10, 7)
-        cell_label = QLabel("CELL MV-01")
+        cell_label = QLabel("Ô trạm MV-01")
         cell_label.setObjectName("sectionTitle")
         command_layout.addWidget(cell_label)
-        command_layout.addSpacing(10)
-        command_layout.addWidget(StatusPill("CELL", "READY"))
-        command_layout.addWidget(StatusPill("SYNC", "LOCAL"))
+        command_layout.addSpacing(14)
+        command_layout.addWidget(StatusPill("Mô hình", "READY"))
+        command_layout.addWidget(StatusPill("Đồng bộ", "LOCAL"))
         command_layout.addStretch()
-        frame_label = QLabel("FRAME  •  WORLD / Y-UP / METERS")
-        frame_label.setStyleSheet("color:#71879a; font-size:10px; font-weight:600;")
+        frame_label = QLabel("Hệ tọa độ thế giới, trục Y hướng lên, đơn vị mét")
+        frame_label.setObjectName("hint")
         command_layout.addWidget(frame_label)
         twin_page_layout.addWidget(twin_command_bar)
-
         engineering_split = QSplitter(Qt.Orientation.Horizontal)
         engineering_split.setChildrenCollapsible(False)
         engineering_split.addWidget(self._build_scene_browser())
@@ -571,54 +565,77 @@ class MainWindow(QMainWindow):
         engineering_split.setSizes([215, 800, 290])
         twin_page_layout.addWidget(engineering_split, 1)
 
-        self.workspace_tabs = QTabWidget()
-        self.workspace_tabs.addTab(operator_page, "VẬN HÀNH")
-        self.workspace_tabs.addTab(twin_page, "DIGITAL TWIN 3D")
+        # -- conveyor & camera tools ---------------------------------------------------------
         conveyor_page = QWidget()
-        conveyor_layout = QVBoxLayout(conveyor_page)
-        conveyor_layout.setContentsMargins(18, 18, 18, 18)
-        conveyor_intro = QLabel(
-            "ĐIỀU KHIỂN BĂNG TẢI · Lệnh thủ công tới ESP32/W5500, hoặc CHẠY TỰ ĐỘNG: "
-            "cảm biến dừng kiện dưới camera, kiểm tra, ghi Supabase rồi chạy tiếp."
+        conveyor_page_layout = QHBoxLayout(conveyor_page)
+        conveyor_page_layout.setContentsMargins(14, 12, 14, 12)
+        conveyor_page_layout.setSpacing(10)
+        belt_panel = QFrame()
+        belt_panel.setObjectName("panel")
+        belt_layout = QVBoxLayout(belt_panel)
+        belt_layout.setContentsMargins(12, 10, 12, 12)
+        belt_title = QLabel("Băng tải chạy tay")
+        belt_title.setObjectName("sectionTitle")
+        belt_layout.addWidget(belt_title)
+        belt_intro = QLabel(
+            "Lệnh trực tiếp tới ESP32 qua UDP để thử băng tải. Khi chạy tự động, "
+            "dùng nút ở trang Vận hành."
         )
-        conveyor_intro.setWordWrap(True)
-        conveyor_intro.setObjectName("sectionTitle")
-        conveyor_layout.addWidget(conveyor_intro)
-        panel_row = QHBoxLayout()
+        belt_intro.setObjectName("hint")
+        belt_intro.setWordWrap(True)
+        belt_layout.addWidget(belt_intro)
         self.conveyor_panel = ConveyorPanel(self.config.get("controller", {}))
-        self.conveyor_panel.setMaximumWidth(650)
         self.conveyor_panel.state_changed.connect(self._on_conveyor_state)
         self.conveyor_panel.connection_changed.connect(self._on_controller_connection)
-        panel_row.addWidget(self.conveyor_panel)
-        panel_row.addStretch()
-        conveyor_layout.addLayout(panel_row)
-        auto_row = QHBoxLayout()
-        self.auto_button = QPushButton("CHẠY TỰ ĐỘNG")
-        self.auto_button.setToolTip(
-            "Cảm biến thấy kiện -> ESP32 dừng băng tải -> kiểm tra QR, logo, bề mặt -> "
-            "ghi Supabase -> chạy tiếp tới điểm gắp. Cần camera đã kết nối."
-        )
-        self.auto_button.clicked.connect(self._toggle_auto_cycle)
         # The UDP STOP button also ends the automatic cycle.
         self.conveyor_panel.stop_button.clicked.connect(self._stop_auto_cycle)
-        self.auto_status = QLabel("IDLE · Chu trình tự động chưa chạy")
-        self.auto_status.setWordWrap(True)
-        auto_row.addWidget(self.auto_button)
-        auto_row.addWidget(self.auto_status, 1)
-        conveyor_layout.addLayout(auto_row)
+        belt_layout.addWidget(self.conveyor_panel)
         safety = QLabel(
-            "AN TOÀN: STOP trong GUI là gói UDP, không phải dừng khẩn. "
-            "Cần công tắc ngắt nguồn motor/E-stop phần cứng và giám sát trực tiếp khi thử. "
-            "Mất ACK nghĩa là trạng thái thực không xác định."
+            "An toàn: nút Dừng trên phần mềm là gói UDP, không phải dừng khẩn. Luôn có công tắc "
+            "ngắt nguồn motor hoặc nút dừng khẩn phần cứng và người giám sát tại chỗ khi chạy thử. "
+            "Không nhận được ACK nghĩa là trạng thái thật của băng tải chưa xác định."
         )
         safety.setWordWrap(True)
-        safety.setStyleSheet("color:#e0ad47; font-weight:600;")
-        conveyor_layout.addWidget(safety)
-        conveyor_layout.addStretch()
-        self.workspace_tabs.addTab(conveyor_page, "BĂNG TẢI / ESP32")
+        safety.setStyleSheet(f"color:{P['review']};")
+        belt_layout.addWidget(safety)
+        belt_layout.addStretch()
+        conveyor_page_layout.addWidget(belt_panel, 1)
+
+        camera_tools_panel = QFrame()
+        camera_tools_panel.setObjectName("panel")
+        camera_tools_layout = QVBoxLayout(camera_tools_panel)
+        camera_tools_layout.setContentsMargins(12, 10, 12, 12)
+        camera_tools_layout.setSpacing(10)
+        tools_title = QLabel("Chất lượng ảnh và hiệu chỉnh camera")
+        tools_title.setObjectName("sectionTitle")
+        camera_tools_layout.addWidget(tools_title)
+        quality_grid = QGridLayout()
+        quality_grid.setHorizontalSpacing(18)
+        quality_grid.addWidget(self.focus_metric, 0, 0)
+        quality_grid.addWidget(self.tenengrad_metric, 0, 1)
+        quality_grid.addWidget(self.motion_metric, 1, 0)
+        quality_grid.addWidget(self.quality_metric, 1, 1)
+        camera_tools_layout.addLayout(quality_grid)
+        camera_tools_layout.addWidget(self.logo_calibration_button)
+        camera_tools_layout.addWidget(self.bench_check)
+        camera_tools_layout.addWidget(self.focus_check)
+        camera_tools_layout.addStretch()
+        conveyor_page_layout.addWidget(camera_tools_panel, 1)
+
+        self.workspace_tabs = QTabWidget()
+        self.workspace_tabs.setDocumentMode(True)
+        self.workspace_tabs.addTab(operator_page, "Vận hành")
+        self.workspace_tabs.addTab(twin_page, "Mô hình 3D")
+        self.workspace_tabs.addTab(conveyor_page, "Băng tải && camera")
         main.addWidget(self.workspace_tabs, 1)
         self.setCentralWidget(root)
         self._set_bench_mode(self.pipeline.bench_mode)
+
+    def _set_auto_button(self, running: bool) -> None:
+        self.auto_button.setText("Dừng chạy tự động" if running else "Bắt đầu chạy tự động")
+        self.auto_button.setObjectName("running" if running else "primary")
+        self.auto_button.style().unpolish(self.auto_button)
+        self.auto_button.style().polish(self.auto_button)
 
     def _build_scene_browser(self) -> QFrame:
         panel = QFrame()
@@ -911,8 +928,8 @@ class MainWindow(QMainWindow):
             worker.stop()
             worker.wait(3000)
         self.camera_status.set_state("OFFLINE")
-        self.frame_state.setText("WAITING")
-        self.frame_state.setStyleSheet("color:#8c9bab; font-weight:700;")
+        self.frame_state.setText("Chờ")
+        self.frame_state.setStyleSheet("color:#93a39e; font-weight:700;")
         self._set_twin_process(ProcessStage.IDLE)
         self.connect_button.setEnabled(True)
         self.connect_button.setText("KẾT NỐI CAMERA")
@@ -932,12 +949,12 @@ class MainWindow(QMainWindow):
             return
         self.connect_button.setEnabled(True)
         self.camera_status.set_state("ONLINE")
-        self.frame_state.setText("LIVE")
-        self.frame_state.setStyleSheet("color:#26a269; font-weight:700;")
+        self.frame_state.setText("Đang xem")
+        self.frame_state.setStyleSheet("color:#4fb985; font-weight:700;")
         self._set_twin_process(ProcessStage.DETECT)
         self.connect_button.setText("NGẮT CAMERA")
         self.inspect_button.setEnabled(True)
-        self.background_button.setEnabled(self.pipeline.bench_mode)
+        self.background_button.setEnabled(True)
         self.logo_calibration_button.setEnabled(True)
         if warnings:
             QMessageBox.warning(self, "Cấu hình camera", "\n\n".join(warnings))
@@ -948,7 +965,7 @@ class MainWindow(QMainWindow):
     def _show_live_view(self) -> None:
         self.video_stack.setCurrentWidget(self.video)
         self.live_view_button.setChecked(True)
-        self.camera_title.setText("LIVE VISION / PHÁT HIỆN KIỆN HÀNG")
+        self.camera_title.setText("Camera trực tiếp")
 
     def _show_snapshot_view(self) -> None:
         if not self.snapshot_view_button.isEnabled():
@@ -956,31 +973,24 @@ class MainWindow(QMainWindow):
             return
         self.video_stack.setCurrentWidget(self.snapshot_video)
         self.snapshot_view_button.setChecked(True)
-        self.camera_title.setText("ẢNH KIỆN TẠI THỜI ĐIỂM KIỂM TRA")
+        self.camera_title.setText("Ảnh kiện lúc kiểm tra")
 
     def _update_damage_reference_status(self) -> None:
         if not hasattr(self, "background_status_label"):
             return
         ready = self.pipeline.damage_reference_ready()
         if ready:
-            self.background_status_label.setText("SẴN SÀNG")
+            self.background_status_label.setText("Sẵn sàng")
             self.background_status_label.setStyleSheet(
-                "color:#26a269; font-weight:700;"
+                "color:#4fb985; font-weight:700;"
             )
         else:
-            self.background_status_label.setText("CHƯA CHỤP NỀN")
+            self.background_status_label.setText("Chưa chụp nền")
             self.background_status_label.setStyleSheet(
-                "color:#d29922; font-weight:700;"
+                "color:#e2b347; font-weight:700;"
             )
 
     def _capture_bench_background(self) -> None:
-        if not self.pipeline.bench_mode:
-            QMessageBox.information(
-                self,
-                "Chụp nền trống",
-                "Chức năng này chỉ dùng trong chế độ BENCH 15–30 CM.",
-            )
-            return
         if not self.frames:
             QMessageBox.warning(
                 self, "Chụp nền trống", "Camera chưa có hình ảnh để hiệu chuẩn."
@@ -1025,8 +1035,8 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         if dialog.exec():
-            self.logo_label.setText("TEMPLATE MỚI — SẴN SÀNG")
-            self.logo_label.setStyleSheet("color:#26a269; font-weight:700;")
+            self.logo_label.setText("Mẫu logo mới đã sẵn sàng")
+            self.logo_label.setStyleSheet("color:#4fb985; font-weight:700;")
 
     def _set_bench_mode(self, enabled: bool) -> None:
         self.pipeline.set_bench_mode(enabled)
@@ -1042,18 +1052,15 @@ class MainWindow(QMainWindow):
             f"gradient • ngưỡng ≥ {float(acquisition.get('min_tenengrad', 0)):.0f}"
         )
         if enabled:
-            self.mode_label.setText("BENCH 15–30 CM")
+            self.mode_label.setText("Chế độ bàn thử 15–30 cm")
             self.mode_label.setStyleSheet(
-                "background:#3a2a0e; color:#f0b84b; border:1px solid #71551f;"
-                "border-radius:10px; padding:6px 11px; font-weight:700;"
+                f"color:{P['review']}; border:1px solid {P['review']}; border-radius:3px;"
+                "padding:4px 9px; font-weight:600; background:transparent;"
             )
-            self.bench_check.setStyleSheet("color:#f0b84b; font-weight:700;")
+            self.mode_label.show()
+            self.bench_check.setStyleSheet(f"color:{P['review']}; font-weight:600;")
         else:
-            self.mode_label.setText("VISION MANUAL")
-            self.mode_label.setStyleSheet(
-                "background:#142f49; color:#73b6fa; border:1px solid #285078;"
-                "border-radius:10px; padding:6px 11px; font-weight:700;"
-            )
+            self.mode_label.hide()
             self.bench_check.setStyleSheet("")
         if hasattr(self, "background_button"):
             self.background_button.setEnabled(enabled and self.camera is not None)
@@ -1073,7 +1080,7 @@ class MainWindow(QMainWindow):
             self.motion_metric.value.setText(f"{metrics.motion:.1f}")
             self.quality_metric.value.setText("READY" if good else "HOLD")
             self.quality_metric.value.setStyleSheet(
-                "color:#26a269;" if good else "color:#d29922;"
+                "color:#4fb985;" if good else "color:#e2b347;"
             )
             # None: no search this frame; False: searched, nothing found.
             if isinstance(detection, PackageDetection):
@@ -1113,15 +1120,16 @@ class MainWindow(QMainWindow):
         live = self.camera is not None and not running and self.auto_thread is None
         self.inspect_button.setEnabled(live)
         self.logo_calibration_button.setEnabled(live)
-        self.background_button.setEnabled(live and self.pipeline.bench_mode)
+        # Both modes: the conveyor camera trigger needs a fresh empty-belt image too.
+        self.background_button.setEnabled(live)
         self.bench_check.setEnabled(not running)
 
     def inspect(self) -> None:
         if not self.frames or self.inspection_thread is not None or self.auto_thread is not None:
             return
         self._inspection_started = perf_counter()
-        self.frame_state.setText("INSPECTING")
-        self.frame_state.setStyleSheet("color:#2f81f7; font-weight:700;")
+        self.frame_state.setText("Đang kiểm tra")
+        self.frame_state.setStyleSheet("color:#d49b4e; font-weight:700;")
         self._set_twin_process(ProcessStage.VISION)
         frames = self.frames.snapshot()
 
@@ -1163,7 +1171,7 @@ class MainWindow(QMainWindow):
         if self.auto_thread is not None:
             self.auto_thread.request_stop()
             self.auto_button.setEnabled(False)
-            self.auto_status.setText("Đang dừng chu trình...")
+            self.auto_status.setText("Đang dừng chu trình…")
             return
         if self.camera is None:
             QMessageBox.warning(self, "Chu trình tự động", "Hãy kết nối camera trước.")
@@ -1180,40 +1188,119 @@ class MainWindow(QMainWindow):
             int(self.config["acquisition"].get("burst_frames", 15)),
             inspect=self.pipeline.inspect,
             record=self._record_result,
+            background=getattr(self.pipeline.damage_detector, "reference", None),
+            external_pick=self._robot_takes_parcels,
+            log_dir=runtime_root() / "logs",
             parent=self,
         )
+        self.auto_thread.parcel_at_pick.connect(self._on_parcel_at_pick)
         self.auto_thread.phase_changed.connect(self._on_auto_phase)
         self.auto_thread.result_ready.connect(self._on_auto_result)
         self.auto_thread.finished.connect(self._on_auto_finished)
-        self.auto_button.setText("DỪNG TỰ ĐỘNG")
+        self._set_auto_button(True)
         self.inspect_button.setEnabled(False)
         self.logo_calibration_button.setEnabled(False)
         self.auto_thread.start()
 
+    def _robot_takes_parcels(self) -> bool:
+        """Overridden by the integrated station: True when the robot sorts automatically.
+
+        Called from the cycle thread; must only read plain attributes.
+        """
+        return False
+
+    def _on_parcel_at_pick(self, result: InspectionResult) -> None:
+        """Parcel stopped at the pick sensor. Standalone: wait for the operator to lift it."""
+        self.picked_button.setEnabled(True)
+        self.auto_status.setText(
+            f"PICKING · Kiện ({result.classification.decision.value}) ở điểm gắp: nhấc kiện ra "
+            "rồi bấm ĐÃ LẤY KIỆN (phím Space) để băng tải chạy tiếp"
+        )
+
+    def _confirm_manual_pick(self) -> None:
+        self.picked_button.setEnabled(False)
+        if self.auto_thread is not None:
+            self.auto_thread.notify_manual_pick()
+
+    # Cycle phase -> (route step, tone).
+    ROUTE_STEPS = {
+        "RUNNING": (0, "active"),
+        "SETTLING": (0, "active"),
+        "INSPECTING": (0, "active"),
+        "RELEASING": (1, "active"),
+        "EJECTING": (1, "reject"),
+        "PICKING": (2, "active"),
+    }
+
     def _on_auto_phase(self, phase: str, text: str) -> None:
-        self.auto_status.setText(f"{phase} · {text}")
-        color = {"FAULT": "#f85149", "IDLE": "#8b949e"}.get(phase, "#2f81f7")
-        self.auto_status.setStyleSheet(f"color:{color}; font-weight:700;")
+        if phase != "PICKING":
+            self.picked_button.setEnabled(False)
+        previous = self.auto_phase
+        self.auto_phase = phase
+        self.auto_status.setText(text)
+        color = {"FAULT": P["reject"], "IDLE": P["muted"]}.get(phase, P["text"])
+        self.auto_status.setStyleSheet(f"color:{color}; font-size:12px; font-weight:600;")
+        if phase == "FAULT":
+            step = self.ROUTE_STEPS.get(previous, (0, "active"))[0]
+            self.route.set_active(step, text, "fault")
+        elif phase == "IDLE":
+            self.route.set_active(None)
+        elif phase in self.ROUTE_STEPS:
+            step, tone = self.ROUTE_STEPS[phase]
+            if phase == "RUNNING":
+                text = "Chờ kiện tới camera"
+            elif phase == "EJECTING":
+                text = "Kiện lỗi chạy ra sọt lỗi"
+            self.route.set_active(step, text, tone)
         if phase in {"SETTLING", "INSPECTING"}:
             self._inspection_started = perf_counter()
-            self.frame_state.setText("INSPECTING")
+            self.frame_state.setText("Đang kiểm tra")
             self._set_twin_process(ProcessStage.VISION)
         if phase == "FAULT":
             self.vision_status.set_state("FAULT")
 
     def _on_auto_result(self, payload: tuple[InspectionResult, str | None, str | None]) -> None:
         result, storage_error, upload_error = payload
-        if self.reporter is not None:
-            self.remote_status.set_state("OFFLINE" if upload_error else "ONLINE")
-            self.remote_status.setToolTip(upload_error or "Đã ghi kết quả lên Supabase")
+        self._refresh_upload_status()
         if storage_error:
             # No modal dialog in automatic mode: the line keeps running.
             self.auto_status.setText(f"Cảnh báo lưu bằng chứng: {storage_error}")
         self._show_result(result)
 
+    def _refresh_upload_status(self) -> None:
+        """SUPABASE pill: ONLINE / OFFLINE / READY, rows waiting, last error (tooltip)."""
+        if not hasattr(self, "remote_status"):
+            return
+        if self.reporter is None:
+            reason = self.config.get("supabase", {}).get("unavailable_reason")
+            if reason:
+                self.remote_status.setToolTip(f"Không gửi lên web: {reason}")
+            self.route.set_web("pending", "Chưa nối web (thử cục bộ)")
+            return
+        status = self.reporter.status()
+        self.remote_status.set_state(status.state)
+        if status.pending:
+            self.remote_status.state.setText(
+                f"{STATE_TEXT.get(status.state, status.state)}, {status.pending} chờ gửi"
+            )
+        if status.state == "OFFLINE" or status.pending:
+            self.route.set_web("fault", f"Mất mạng, {status.pending} kết quả chờ gửi")
+        elif status.state == "ONLINE":
+            self.route.set_web("done", f"Đã lưu {status.sent} kết quả")
+        if status.state == "OFFLINE":
+            tip = f"Mất kết nối Supabase, {status.pending} kết quả đang chờ gửi lại: {status.last_error}"
+        elif status.state == "ONLINE":
+            tip = f"Đã gửi {status.sent} kết quả lên web trong phiên này"
+        else:
+            tip = "Đã kết nối cấu hình Supabase, chưa gửi kết quả nào"
+        self.remote_status.setToolTip(tip)
+
     def _on_auto_finished(self) -> None:
         self.auto_thread = None
-        self.auto_button.setText("CHẠY TỰ ĐỘNG")
+        self.picked_button.setEnabled(False)
+        self._set_auto_button(False)
+        self.auto_phase = "IDLE"
+        self.route.set_active(None)
         self.auto_button.setEnabled(True)
         self._set_inspecting(False)
 
@@ -1227,77 +1314,63 @@ class MainWindow(QMainWindow):
         result, storage_error, upload_error = payload
         if storage_error:
             QMessageBox.warning(self, "Audit storage warning", storage_error)
-        if self.reporter is not None:
-            # No dialog on upload failure: the row is queued and the belt keeps running.
-            self.remote_status.set_state("OFFLINE" if upload_error else "ONLINE")
-            self.remote_status.setToolTip(upload_error or "Đã ghi kết quả lên Supabase")
+        # No dialog on upload failure: the row is queued and the belt keeps running.
+        self._refresh_upload_status()
         self._show_result(result)
 
     def _on_inspection_error(self, exc: Exception) -> None:
         if isinstance(exc, FrameQualityError):
-            self.frame_state.setText("QUALITY HOLD")
-            self.frame_state.setStyleSheet("color:#d29922; font-weight:700;")
+            self.frame_state.setText("Ảnh chưa đạt, chờ chụp lại")
+            self.frame_state.setStyleSheet("color:#e2b347; font-weight:700;")
             self._set_twin_process(ProcessStage.VISION)
             QMessageBox.warning(self, "Quality gate", str(exc))
             return
         # show adapter/runtime errors to the operator
         self.vision_status.set_state("FAULT")
-        self.frame_state.setText("FAULT")
-        self.frame_state.setStyleSheet("color:#f85149; font-weight:700;")
+        self.frame_state.setText("Lỗi")
+        self.frame_state.setStyleSheet("color:#e35d4f; font-weight:700;")
         QMessageBox.critical(self, "Inspection error", str(exc))
 
     def _show_result(self, result: InspectionResult) -> None:
         classification = result.classification
-        colors = {
-            Decision.PASS: "#26a269",
-            Decision.REJECT: "#f85149",
-            Decision.MANUAL_REVIEW: "#d29922",
-        }
-        backgrounds = {
-            Decision.PASS: "rgba(38,162,105,35)",
-            Decision.REJECT: "rgba(248,81,73,35)",
-            Decision.MANUAL_REVIEW: "rgba(210,153,34,35)",
-        }
-        decision_text = classification.decision.value
+        colors = {decision: DECISION_COLORS[decision.value] for decision in Decision}
+        decision_text = DECISION_TEXT[classification.decision.value]
+        if classification.decision == Decision.PASS and not self.local_test_mode:
+            decision_text += f", sọt {classification.destination_bin}"
         if self.local_test_mode:
-            decision_text = {
-                Decision.PASS: "LOCAL PASS",
-                Decision.REJECT: "LOCAL FAIL",
-                Decision.MANUAL_REVIEW: "LOCAL REVIEW",
-            }[classification.decision]
+            decision_text += " (thử cục bộ)"
         self.decision_label.setText(decision_text)
         self.decision_label.setStyleSheet(
-            f"font-size:23px; font-weight:800; color:{colors[classification.decision]};"
-            f"background:{backgrounds[classification.decision]}; border-radius:6px;"
-            "padding:6px 9px;"
+            f"font-family:'{DISPLAY}'; font-size:26px; font-weight:600;"
+            f"color:{colors[classification.decision]}; padding:4px 0;"
         )
         self.waybill_label.setText(classification.parcel.waybill_code or "—")
         self.qr_payload_label.setText(
-            classification.parcel.qr_text or "KHÔNG ĐỌC ĐƯỢC"
+            classification.parcel.qr_text or "Không đọc được"
         )
         logo = classification.parcel.logo
-        logo_text = "CHƯA HIỆU CHUẨN"
+        logo_text = "Chưa hiệu chuẩn"
         if logo and logo.calibrated:
-            logo_text = "OK" if logo.present else "KHÔNG KHỚP"
+            logo_text = "Đúng logo" if logo.present else "Không khớp"
             logo_text += f" ({logo.score:.2f})"
         self.logo_label.setText(logo_text)
         damage = classification.parcel.damage
-        damage_text = "CHƯA HIỆU CHUẨN"
+        damage_text = "Chưa hiệu chuẩn"
         if damage and damage.calibrated:
             if damage.damaged is None:
-                damage_text = "CHƯA KẾT LUẬN"
+                damage_text = "Chưa kết luận"
             elif damage.damaged:
                 names = {
-                    "label_tear": "RÁCH NHÃN",
-                    "deformation": "MÓP / MÉO",
-                    "dent_or_edge_tear": "MÓP / RÁCH CẠNH",
-                    "irregular_outline": "BIẾN DẠNG",
-                    "hole_or_puncture": "THỦNG LỖ",
+                    "label_tear": "rách tem",
+                    "deformation": "móp, méo",
+                    "dent_or_edge_tear": "móp hoặc rách cạnh",
+                    "irregular_outline": "biến dạng",
+                    "hole_or_puncture": "thủng",
                 }
-                translated = [names.get(item, item.upper()) for item in damage.damage_types]
-                damage_text = "LỖI — " + ", ".join(translated)
+                translated = [names.get(item, item) for item in damage.damage_types]
+                damage_text = "Hư hỏng: " + ", ".join(translated)
             else:
-                damage_text = "BÌNH THƯỜNG"
+                damage_text = "Bình thường"
         self.damage_label.setText(damage_text)
         self.destination_label.setText(classification.destination_bin)
         self.reason_label.setText(classification.reason)
@@ -1340,11 +1413,16 @@ class MainWindow(QMainWindow):
             classification.destination_bin,
             classification.reason,
         )
+        tooltip = f"QR: {values[2]}. {classification.reason}"
         for column, value in enumerate(values):
-            self.history.setItem(0, column, QTableWidgetItem(value))
+            item = QTableWidgetItem(value)
+            item.setToolTip(tooltip)
+            if column == 3:
+                item.setForeground(QColor(colors[classification.decision]))
+            self.history.setItem(0, column, item)
 
     def _update_clock(self) -> None:
-        self.clock_label.setText(datetime.now().strftime("%d/%m/%Y   %H:%M:%S"))
+        self.clock_label.setText(datetime.now().strftime("%H:%M:%S  %d/%m/%Y"))
 
     def closeEvent(self, event) -> None:
         if self.auto_thread is not None:

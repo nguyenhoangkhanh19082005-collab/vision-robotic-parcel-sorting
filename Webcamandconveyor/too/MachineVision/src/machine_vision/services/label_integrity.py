@@ -35,6 +35,32 @@ def _kernel(size: float) -> np.ndarray:
     return cv2.getStructuringElement(cv2.MORPH_RECT, (side, side))
 
 
+def _local_std(lightness: np.ndarray, size: int = 9) -> np.ndarray:
+    mean = cv2.blur(lightness, (size, size))
+    square = cv2.blur(lightness * lightness, (size, size))
+    return np.sqrt(np.maximum(square - mean * mean, 0.0))
+
+
+def _is_print_bay(
+    contour: np.ndarray, start: int, end: int, texture: np.ndarray, chroma: np.ndarray,
+    settings: dict,
+) -> bool:
+    """True when the concave bay between contour[start..end] is printed matter.
+
+    2026-11-23 station frames: barcode bays median local std 14-18, chroma 3-7;
+    five real tears median std 2.3-2.6, chroma 17-20 (relative to the paper).
+    """
+    points = contour[start:end + 1] if start <= end else np.vstack([contour[start:], contour[:end + 1]])
+    mask = np.zeros(texture.shape, dtype=np.uint8)
+    cv2.fillPoly(mask, [points], 255)
+    inside = mask > 0
+    if np.count_nonzero(inside) < 50:
+        return False
+    busy = float(np.median(texture[inside])) >= float(settings.get("label_print_min_std", 8.0))
+    neutral = float(np.median(chroma[inside])) <= float(settings.get("label_print_max_chroma", 10.0))
+    return busy and neutral
+
+
 def assess_label_integrity(
     frame: np.ndarray, qr_corners: np.ndarray, settings: dict | None = None
 ) -> LabelIntegrity:
@@ -56,6 +82,7 @@ def assess_label_integrity(
     reference = np.median(ring_pixels, axis=0)
 
     chroma = np.hypot(lab[:, :, 1] - reference[1], lab[:, :, 2] - reference[2])
+    texture = _local_std(cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)[:, :, 0].astype(np.float32))
     paper = np.uint8(
         (lab[:, :, 0] > float(settings.get("label_paper_lightness_ratio", 0.80)) * reference[0])
         & (chroma < float(settings.get("label_paper_max_chroma", 7.0)))
@@ -85,22 +112,35 @@ def assess_label_integrity(
     touches_border = x <= margin or y <= margin or x + w >= width_px - margin or y + h >= height_px - margin
 
     depth = 0.0
+    raw_depth = 0.0
     notch_point = None
     hull = cv2.convexHull(contour, returnPoints=False)
     if hull is not None and len(hull) > 3:
         defects = cv2.convexityDefects(contour, hull)
         # OpenCV 4.x returns (N, 1, 4), 5.x returns (N, 4).
-        defects = None if defects is None else defects.reshape(-1, 1, 4)
+        defects = None if defects is None else defects.reshape(-1, 4)
         if defects is not None:
-            index = int(np.argmax(defects[:, 0, 3]))
-            depth = float(defects[index, 0, 3]) / 256.0
-            point = contour[int(defects[index, 0, 2])][0]
-            notch_point = (int(point[0]), int(point[1]))
+            raw_depth = float(defects[:, 3].max()) / 256.0
+            # Print printed up to the label edge (the barcode strip of the 2026-11-23
+            # label) also leaves a bay in the paper mask. A tear shows smooth, coloured
+            # carton / belt / board; print is busy and neutral. Only tears count.
+            ignore_below = 0.5 * float(settings.get("label_max_notch_qr", 0.27)) * side
+            for start, end, far, fixed_depth in sorted(defects, key=lambda d: -d[3]):
+                candidate = float(fixed_depth) / 256.0
+                if candidate < ignore_below:
+                    break
+                if _is_print_bay(contour, int(start), int(end), texture, chroma, settings):
+                    continue
+                depth = candidate
+                point = contour[int(far)][0]
+                notch_point = (int(point[0]), int(point[1]))
+                break
     metrics = {
         "label_qr_side_px": side,
         "label_area_qr2": area / side**2,
         "label_rectangularity": rectangularity,
         "label_notch_qr": depth / side,
+        "label_notch_raw_qr": raw_depth / side,
     }
     if touches_border:
         return LabelIntegrity(

@@ -13,7 +13,8 @@ J3: điểm twin cũ cách trục STEP  11.1 mm (sau khi dời theo mesh khâu 3
 J4: điểm twin cũ cách trục STEP   1.6 mm (sau khi dời theo mesh khâu 4:  8.4 mm); lệch hướng 0.00°
 J5: điểm twin cũ cách trục STEP   4.4 mm (sau khi dời theo mesh khâu 5:  0.4 mm); lệch hướng 0.00°
 J6: điểm twin cũ cách trục STEP   8.4 mm (sau khi dời theo mesh khâu 6:  0.0 mm); lệch hướng 0.00°
-Góc đưa tư thế CAD về chữ L chuẩn (độ, theo chiều dương twin): J1 +0.00, J2 +5.89, J3 +11.61, J4 -13.24, J5 +15.51, J6 +0.00
-Tư thế 0 mới: cánh tay trên lệch phương đứng 0.000°; trục J4 so với phương ngang 0.000°; J5∥J2 lệch 0.000°; J6 so với J4 0.000°
+Cộng thêm góc home thật (độ, chiều dương twin): J1 +0.0, J2 +12.5, J3 +12.5, J4 +0.0, J5 +22.0, J6 -124.0  (J2 cúi về trước = chiều dương twin)
+Góc đưa tư thế CAD về tư thế 0 (chữ L, đầu hút chúc xuống) (độ, theo chiều dương twin): J1 +0.00, J2 +18.39, J3 +24.11, J4 -13.24, J5 -52.49, J6 -124.00
+Tư thế 0 mới: cánh tay trên lệch phương đứng 12.500°; trục J4 so với phương đứng 65.000°; J5∥J2 lệch 0.000°; J6 so với J4 68.000°
 Kích thước: J2–J3 = 154.50 mm; J3 → tâm cổ tay = 251.00 mm; tâm cổ tay → điểm J6 = 34.09 mm; J2 cao hơn điểm J1 120.36 mm; lệch trục J4–J3 0.000 mm
 Mặt ngoài mặt bích AX-6 cách điểm J6 4.41 mm dọc trục; miệng giác cách mặt bích 129 mm → tool_length = 126.0 mm (với flange_offset 7.4 mm của kinematics_poe)

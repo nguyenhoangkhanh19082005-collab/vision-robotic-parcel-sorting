@@ -1,7 +1,7 @@
 # Cấu hình trạm phân loại hợp nhất (Vision + băng tải ESP32 + robot 6 trục)
 # Đơn vị: mét cho `layout`, milimét cho tọa độ robot trong `sorting`, độ cho góc khớp.
 # Hệ tọa độ chung: hệ BASE robot — gốc ở chân đế trên trục J1, Z hướng lên, X hướng ra trước
-# (phía cổ tay khi robot ở tư thế 0). Mọi giá trị bố trí dưới đây là ƯỚC LƯỢNG ban đầu:
+# (phía cẳng tay ở tư thế 0; từ 24/11/2026 tư thế 0 = HOME THẬT: J2 cúi trước 12.5°, cẳng tay chúc 25°, đầu hút chúc xuống — home [0,…,0]). Mọi giá trị bố trí dưới đây là ƯỚC LƯỢNG ban đầu:
 # phải đo lại tại hiện trường hoặc dùng chức năng "GHI TƯ THẾ" để dạy vị trí thật.
 
 paths:
@@ -21,7 +21,12 @@ robot:
   # Tỉ lệ robot in thật / CAD Roboter.STEP (1.0 = đúng CAD: trục vai cao 212 mm, thân J1 Ø≈156 mm,
   # đế Ø≈262 mm). Đo robot thật rồi đặt = số đo thật / số CAD. Áp dụng cho cả twin lẫn IK.
   scale: 1.0                # 21/11/2026: robot in 1:1 từ chính file CAD (vừa động cơ NEMA17 42 mm); 0.80 cũ chỉ ước lượng từ ảnh
-  telemetry_timeout_s: 0.5   # quá hạn → twin hiển thị góc lệnh thay vì góc thực
+  # 22/11/2026: J2 KHÓA CỨNG (đai J2 không chịu nổi tải). Điền góc J2 đã khóa (độ, cùng quy ước GUI robot)
+  # để IK chỉ dùng J1, J3–J6. null = không khóa. Đầu hút được phép nghiêng tối đa max_tool_tilt_deg.
+  # 24/11/2026: KHÓA ở 0° = cánh tay trên dựng đứng của tư thế 0 mới (chữ L, đầu hút chúc xuống); firmware J2_HARD_LOCK.
+  lock_j2_deg: 0.0
+  max_tool_tilt_deg: 15.0
+  telemetry_timeout_s: 0.5  # quá hạn → twin hiển thị góc lệnh thay vì góc thực
 
 layout:
   conveyor:
@@ -46,17 +51,22 @@ layout:
       leg_thickness: 1.5
       leg_foot_length: 30
   camera:
-    y: -0.20                 # vị trí camera dọc băng tải (giá camera chưa in — vị trí dự kiến)
-    height_above_belt: 0.40  # khớp installation.camera_to_belt_cm của MachineVision
-    show_mount: false        # true khi đã in và lắp giá camera
+    # 23/11/2026: gá camera/đèn/cảm biến của nhóm (assets/station_equipment, xuất từ STEP toàn trạm):
+    # webcam C260 treo dưới tay đòn gá, tâm ống kính nhích 35 mm về đầu băng so với thanh ngang (ước lượng).
+    y: -0.0275               # tâm ống kính dọc băng tải (m)
+    height_above_belt: 0.137 # ống kính cách mặt băng (m) — MachineVision installation.camera_to_belt_cm nên khớp số đo thật
+    show_mount: true         # vẽ gá + webcam + đèn ring + cảm biến M18 (mesh trong assets/station_equipment)
   pick_y: 0.0                # điểm robot gắp trên băng (gần đầu ra)
-  parcel_size: [0.11, 0.15, 0.06]  # X ngang băng, Y dọc băng; nhãn A6 105×148 mm rộng hơn băng 100 mm
+  parcel_size: [0.09, 0.12, 0.05]  # X ngang băng, Y dọc băng, cao (23/11/2026: thu nhỏ từ 0.11 × 0.15 × 0.06)
   # 3 thùng: 2 vùng giao hàng miền Bắc + 1 thùng lỗi (kiện hỏng / cần xem lại).
-  # Vị trí giữ nguyên như bản cũ: ĐẠT → ĐỒNG BẰNG, XEM LẠI → TRUNG DU, LỖI giữ nguyên.
+  # 23/11/2026: cả 3 thùng gom về CUỐI băng tải (đầu ra, Y = +0.10) cho robot gắp – thả ngắn:
+  #   LỖI ngay sau cuối băng; ĐỒNG BẰNG bên trái băng (phía robot, sau chân đế); TRUNG DU-MN bên phải băng
+  #   (sát ngoài thanh đế gá camera, dưới cảm biến M18 — miệng thùng thấp hơn đáy cảm biến ≈ 25 mm).
+  #   Đã kiểm tra IK: cả 3 điểm thả và điểm tiếp cận +60 mm đều với tới, đầu hút thẳng đứng.
   bins:                      # tâm ĐÁY thùng (m) và kích thước
-    DONG_BANG: {label: "THÙNG ĐỒNG BẰNG",   color: "#26a269", center: [0.03, 0.27, -0.043],  size: [0.16, 0.14, 0.08]}
-    LOI:       {label: "THÙNG LỖI",         color: "#f85149", center: [0.03, -0.27, -0.043], size: [0.16, 0.14, 0.08]}
-    TRUNG_DU:  {label: "THÙNG TRUNG DU-MN", color: "#2f81f7", center: [-0.15, 0.22, -0.043], size: [0.16, 0.14, 0.08]}
+    DONG_BANG: {label: "THÙNG ĐỒNG BẰNG",   color: "#26a269", center: [0.07, 0.22, -0.043],  size: [0.16, 0.14, 0.08]}
+    LOI:       {label: "THÙNG LỖI",         color: "#f85149", center: [0.24, 0.185, -0.043], size: [0.16, 0.14, 0.08]}
+    TRUNG_DU:  {label: "THÙNG TRUNG DU-MN", color: "#2f81f7", center: [0.37, 0.03, -0.043],  size: [0.16, 0.14, 0.08]}
 
 sorting:
   joint_speed_deg_s: 9.0       # ≤ tốc độ firmware J2 ≈ 10°/s (hộp số 1:27 × đai 4, 06/11/2026)
@@ -67,14 +77,19 @@ sorting:
   suck_dwell_s: 0.6
   release_dwell_s: 0.5
   conveyor_transfer_s: 2.5     # thời gian chạy băng tải từ camera tới điểm gắp (0 = bỏ qua băng tải)
+  # ↑ chỉ dùng khi KHÔNG chạy CHẠY TỰ ĐỘNG chế độ camera (MachineVision station_cycle.trigger: camera):
+  #   khi đó kiện được cảm biến dừng sẵn ở điểm gắp và robot gắp ngay, không chạy theo giờ.
   conveyor_ack_timeout_s: 2.0
   tick_ms: 40
   home_joints_deg: [0, 0, 0, 0, 0, 0]
-  pick_xyz_mm: [220, 0, 97]    # mặt trên kiện: mặt băng 82 + kiện 60 - nén 2 - đế nâng 43
-  bins:
-    DONG_BANG: {drop_xyz_mm: [30, 270, 127]}
-    LOI:       {drop_xyz_mm: [30, -270, 127]}
-    TRUNG_DU:  {drop_xyz_mm: [-150, 220, 127]}
+  # 24/11/2026 (lần 3): home = tư thế thật (J2 cúi trước 12.5°, khóa ở đó = 0° mới). Đầu hút thẳng đứng đi trên cung
+  #   z 57 → r 251 | z 87 → r 265 | z 117 → r 276 | z 157 → r 283 | z 183 → r 284 (max). Cho nghiêng ≤ 15° thì với tới
+  #   khoảng r 250–320. X gắp = 250: mọi kiện cao 20–150 mm đều hút được (nghiêng 0.3–12°), vẫn trong mặt kiện (X 175–265).
+  pick_xyz_mm: [250, 0, 87]    # mặt trên kiện: mặt băng 82 + kiện 50 - nén 2 - đế nâng 43 (23/11/2026)
+  bins:                        # 24/11 lần 3: điểm thả dời ra vành r 270–320 mm (J2 cúi trước → không với được gần), thùng giữ chỗ
+    DONG_BANG: {drop_xyz_mm: [100, 255, 140]}   # r 274, nghiêng ≈ 3° (trong thùng X −10..150, Y 150..290)
+    LOI:       {drop_xyz_mm: [220, 170, 150]}   # r 278, nghiêng ≈ 1–2° (trong thùng X 160..320, Y 115..255)
+    TRUNG_DU:  {drop_xyz_mm: [320, 30, 180]}    # r 321, nghiêng 12.8° — cách mép thùng gần robot (X 290) 30 mm; nên dời thùng sát robot 2–3 cm
   # Kiện PASS: đi theo destination_bin Vision trả về = orders.destination_chute_id (hub trên web).
   # Hub không có trong bảng này → thùng LỖI (không bao giờ đoán vùng giao hàng).
   destination_map:

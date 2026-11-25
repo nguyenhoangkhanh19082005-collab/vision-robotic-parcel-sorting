@@ -80,7 +80,7 @@ JOINT_AXES = [
 # 15/11/2026 — Hình học chính xác lấy từ file lắp ráp STEP (dong_hoc_step.py, sinh bởi src/cad/tinh_dong_hoc_tu_step.py):
 # - JOINT_POINTS cũ ở trên lệch trục khớp thật 3–13 mm vì mesh từng khâu của bản xuất URDF chưa ghép khít;
 # - tư thế 0 cũ là tư thế vẽ CAD (cánh tay trên nghiêng 5.9°, cẳng tay chúc lên 17.5°, J4 xoay 13.2°, cổ tay gập 15.5°).
-# Tư thế 0 MỚI = chữ L chuẩn (cánh tay trên dựng đứng, cẳng tay nằm ngang, cổ tay thẳng) — trùng cách đặt gốc robot thật.
+# Tư thế 0 = CHỮ L ĐẦU HÚT CHÚC XUỐNG từ 24/11/2026 (cánh tay trên đứng, cẳng tay ngang, trục J6 chỉ xuống). Dựng thẳng đứng (22/11) = J3 −90°, J5 +90°.
 # LINK_MESH_TRANSFORMS: ma trận đặt lại mesh từng khâu cho khớp với điểm/trục mới. Hằng số cũ giữ làm dự phòng.
 LINK_MESH_TRANSFORMS: dict = {}
 try:
@@ -89,6 +89,12 @@ try:
     JOINT_POINTS, JOINT_AXES, LINK_MESH_TRANSFORMS = _geo.JOINT_POINTS, _geo.JOINT_AXES, _geo.LINK_MESH_TRANSFORMS
 except ImportError:
     print("[robot_simulation] Không tìm thấy dong_hoc_step.py — dùng hình học cũ (kém chính xác).")
+
+
+# 24/11/2026: dụng cụ gắn khâu 6 (gá giác hút + giác hút L60-M12 / DP-40), STL mm trong HỆ FILE mesh link_6_1
+# (xuất bởi src/cad/tram_step_5_dung_cu_J6.py) → dùng chung tỉ lệ + LINK_MESH_TRANSFORMS + biến đổi của link_6_1.
+TOOL_MESHES = {"link_6_tool_ga": ("link_6_1", "#3B82F6"), "link_6_tool_giac_hut": ("link_6_1", "#9CA3AF")}
+TOOL_STATE_COLORS = {0: "#9CA3AF", 1: "#22C55E", 2: "#F59E0B"}
 
 
 def rot_axis_4x4(axis: np.ndarray, angle_rad: float) -> np.ndarray:
@@ -323,6 +329,36 @@ class RobotSimulationWidget:
                     self._meshes[link_name] = self._make_fallback_mesh(link_name)
             else:
                 self._meshes[link_name] = self._make_fallback_mesh(link_name)
+        # dụng cụ khâu 6 (nếu có file)
+        info6 = self._parser.links.get("link_6_1", {})
+        mesh6 = info6.get("mesh_path")
+        for tool_name, (parent, _color) in TOOL_MESHES.items():
+            path = os.path.join(os.path.dirname(mesh6), tool_name + ".stl") if mesh6 else ""
+            if not (path and os.path.isfile(path)):
+                continue
+            try:
+                mesh = pv.read(path)
+                scale = info6.get("mesh_scale", np.ones(3))
+                if not np.allclose(scale, 1.0):
+                    mesh.points *= scale
+                pre = LINK_MESH_TRANSFORMS.get(parent)
+                if pre is not None:
+                    mesh.transform(np.asarray(pre, dtype=float), inplace=True)
+                self._meshes[tool_name] = mesh
+            except Exception:
+                pass
+
+    def set_tool_state(self, state: int):
+        """Tô màu giác hút theo trạng thái: xám TẮT, xanh HÚT, cam NHẢ."""
+        actor = self._actors.get("link_6_tool_giac_hut")
+        if actor is None:
+            return
+        try:
+            actor.prop.color = TOOL_STATE_COLORS.get(int(state), "#9CA3AF")
+            if self._plotter is not None:
+                self._plotter.render()
+        except Exception:
+            pass
 
     def _make_fallback_mesh(self, link_name: str):
         if pv is None:
@@ -351,6 +387,11 @@ class RobotSimulationWidget:
                 name=link_name,
             )
             self._actors[link_name] = actor
+        for tool_name, (_parent, color) in TOOL_MESHES.items():
+            mesh = self._meshes.get(tool_name)
+            if mesh is not None:
+                self._actors[tool_name] = self._plotter.add_mesh(mesh.copy(), color=color, smooth_shading=True,
+                                                                 name=tool_name)
 
         self._update_actors()
 
@@ -373,7 +414,8 @@ class RobotSimulationWidget:
         transforms = self._compute_link_transforms()
 
         for link_name, actor in self._actors.items():
-            T_final = transforms.get(link_name, np.eye(4))
+            parent = TOOL_MESHES.get(link_name, (link_name,))[0]
+            T_final = transforms.get(parent, np.eye(4))
             if hasattr(actor, "user_matrix"):
                 actor.user_matrix = T_final
             elif hasattr(actor, "SetUserMatrix"):

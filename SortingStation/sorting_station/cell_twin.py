@@ -75,6 +75,24 @@ def _load_mesh(path: Path, scale: float = 1.0):
     return _MESH_CACHE[key]
 
 
+EQUIPMENT_DIR = Path(__file__).resolve().parents[1] / "assets" / "station_equipment"
+
+
+def _load_equipment() -> list[tuple[object, str]]:
+    """Gá camera + webcam + đèn ring + cảm biến (STL mm, hệ base robot) theo manifest.json; thiếu thư mục → []."""
+    import json
+
+    manifest = EQUIPMENT_DIR / "manifest.json"
+    if not manifest.is_file():
+        return []
+    out = []
+    for part in json.loads(manifest.read_text(encoding="utf-8")).get("parts", []):
+        path = EQUIPMENT_DIR / part["file"]
+        if path.is_file():
+            out.append((_load_mesh(path), part.get("color", "#7a7f86")))
+    return out
+
+
 def _translation(xyz) -> np.ndarray:
     matrix = np.eye(4)
     matrix[:3, 3] = xyz
@@ -239,16 +257,24 @@ class CellTwinView(QWidget):
 
         # Camera (+ giá đỡ nếu đã lắp: layout.camera.show_mount)
         cam_z = ztop + lay.camera_height_above_belt
-        if lay.camera_show_mount:
+        equipment = _load_equipment() if lay.camera_show_mount else []
+        if equipment:
+            # 23/11/2026: gá camera/đèn/cảm biến thật của nhóm + webcam C260 + đèn ring + cảm biến M18 (mesh mm, hệ base,
+            # xuất từ STEP toàn trạm — robotarm-6-axis/src/cad/tram_step_3_xuat_tram.py)
+            for mesh, color in equipment:
+                self._add("equipment", mesh, color=color, smooth_shading=True)
+        elif lay.camera_show_mount:
             for x in (cx - w / 2 - 0.05, cx + w / 2 + 0.05):
                 self._add("equipment", pv.Box((x - 0.01, x + 0.01, lay.camera_y - 0.01, lay.camera_y + 0.01,
                                                0.0, cam_z + 0.04)), color="#647787")
             self._add("equipment", pv.Box((cx - w / 2 - 0.06, cx + w / 2 + 0.06, lay.camera_y - 0.012,
                                            lay.camera_y + 0.012, cam_z + 0.03, cam_z + 0.05)), color="#708596")
-        self._add("equipment", pv.Box((cx - 0.04, cx + 0.04, lay.camera_y - 0.03, lay.camera_y + 0.03,
-                                       cam_z, cam_z + 0.03)), color="#2f81f7")
-        # Vùng nhìn camera (frustum) — layer vision_zones
-        half_x, half_y = 0.13, 0.10
+        if not equipment:
+            self._add("equipment", pv.Box((cx - 0.04, cx + 0.04, lay.camera_y - 0.03, lay.camera_y + 0.03,
+                                           cam_z, cam_z + 0.03)), color="#2f81f7")
+        # Vùng nhìn camera (frustum) — layer vision_zones. Góc nhìn webcam ≈ 58° × 46° → nửa vùng = 0.55 h × 0.42 h
+        h = lay.camera_height_above_belt
+        half_x, half_y = min(0.13, 0.55 * h), min(0.10, 0.42 * h)
         corners = [(cx - half_x, lay.camera_y - half_y), (cx + half_x, lay.camera_y - half_y),
                    (cx + half_x, lay.camera_y + half_y), (cx - half_x, lay.camera_y + half_y)]
         apex = np.array([cx, lay.camera_y, cam_z])
@@ -290,10 +316,21 @@ class CellTwinView(QWidget):
             path = self.mesh_dir / f"{name}.stl"
             mesh = _load_mesh(path, self.model.mesh_scale) if path.is_file() else pv.Box((-0.02, 0.02, -0.02, 0.02, -0.02, 0.02))
             self._robot_actors.append(p.add_mesh(mesh, color=color, smooth_shading=True))
-        cup_length = max(self.model.tool_length_m, 0.005)
-        cup = pv.Cylinder(center=(0, 0, -cup_length / 2), direction=(0, 0, 1), radius=0.011, height=cup_length)
-        self._tool = p.add_mesh(cup, color=TOOL_COLORS[0])
+        # 24/11/2026: gá giác hút + giác hút L60-M12 / DP-40 thật (tách từ lắp ráp v3, hệ file mesh khâu 6 —
+        # robotarm-6-axis/src/cad/tram_step_5_dung_cu_J6.py). Thiếu file → khối trụ dài tool_length như cũ.
+        ga_path, cup_path = self.mesh_dir / "link_6_tool_ga.stl", self.mesh_dir / "link_6_tool_giac_hut.stl"
+        self._tool_on_link6 = ga_path.is_file() and cup_path.is_file()
+        if self._tool_on_link6:
+            self._tool_ga = p.add_mesh(_load_mesh(ga_path, self.model.mesh_scale), color="#3b82f6", smooth_shading=True)
+            self._tool = p.add_mesh(_load_mesh(cup_path, self.model.mesh_scale), color=TOOL_COLORS[0], smooth_shading=True)
+        else:
+            cup_length = max(self.model.tool_length_m, 0.005)
+            cup = pv.Cylinder(center=(0, 0, -cup_length / 2), direction=(0, 0, 1), radius=0.011, height=cup_length)
+            self._tool_ga = None
+            self._tool = p.add_mesh(cup, color=TOOL_COLORS[0])
         self._robot_actors.append(self._tool)
+        if self._tool_ga is not None:
+            self._robot_actors.append(self._tool_ga)
 
         self._overlay_name = "cell_overlay"
         self._apply_state()
@@ -324,7 +361,11 @@ class CellTwinView(QWidget):
         for actor, matrix in zip(self._robot_actors[:7], transforms):
             actor.user_matrix = matrix
         tcp = self.model.fk(np.radians(q_deg))
-        self._tool.user_matrix = tcp
+        if self._tool_on_link6:
+            self._tool.user_matrix = transforms[6]
+            self._tool_ga.user_matrix = transforms[6]
+        else:
+            self._tool.user_matrix = tcp
         self._tool.prop.color = TOOL_COLORS.get(scene.tool_state, "#8b9aab")
 
         # Vạch băng tải

@@ -166,9 +166,11 @@ class _Damage:
 
 class _CountingReader(QrReader):
     calls = 0
+    shapes: list = []
 
     def read(self, image):
         type(self).calls += 1
+        type(self).shapes.append(image.shape[:2])
         return super().read(image)
 
 
@@ -195,6 +197,7 @@ def test_inspect_decodes_full_frame_qr_once_and_returns_display_label():
     }
     reader = _CountingReader({"upscale": 2.0})
     _CountingReader.calls = 0
+    _CountingReader.shapes = []
     pipeline = VisionPipeline(
         config,
         reader,
@@ -208,8 +211,11 @@ def test_inspect_decodes_full_frame_qr_once_and_returns_display_label():
 
     result = pipeline.inspect([frame, frame])
 
-    assert _CountingReader.calls == 1
+    # The 2K frame is decoded once; the read-ratio check only decodes small QR crops.
+    assert _CountingReader.shapes.count(frame.shape[:2]) == 1
+    assert all(h < 900 and w < 1400 for h, w in _CountingReader.shapes[1:])
     assert result.classification.parcel.qr_text == "VN123456789"
+    assert result.classification.parcel.qr_read_ratio == 1.0
     assert result.label_image.shape == (1480, 1050, 3)
 
 

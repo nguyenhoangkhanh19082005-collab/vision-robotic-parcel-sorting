@@ -89,7 +89,7 @@ def main() -> int:
     ap.add_argument("--joints", default="1,2,3,4,5,6")
     args = ap.parse_args()
     joints = [int(j) for j in args.joints.split(",")]
-    if input("Robot đang ở tư thế chữ L chuẩn, vùng làm việc trống, tay sẵn sàng ngắt nguồn động cơ? Gõ YES để bắt đầu: ").strip() != "YES":
+    if input("Robot đang ở tư thế 0 DỰNG THẲNG ĐỨNG, vùng làm việc trống, tay sẵn sàng ngắt nguồn động cơ? Gõ YES để bắt đầu: ").strip() != "YES":
         return 0
 
     port = serial.Serial(args.port, 115200, timeout=0.05)

@@ -89,7 +89,7 @@ def exchange(host: str, port: int, command: str, timeout_s: float = 0.6) -> Conv
 # ---------------------------------------------------------------------------
 _STATUS = re.compile(
     r"^STATUS:(FWD|REV|STOP):(\d{1,3}):SENSOR=([01]):COUNT=(\d+):AUTO=([01]):DELAY=(\d+)"
-    r":ISR=(-?\d+):ISL=(-?\d+):UP=(\d+)$"
+    r":ISR=(-?\d+):ISL=(-?\d+):UP=(\d+)(?::ASTOP=([01]))?$"
 )
 
 
@@ -102,6 +102,9 @@ class ConveyorStatus:
     auto: bool
     delay_ms: int
     raw: str
+    # Firmware v2.1: the last stop was the AUTO pick stop (the parcel may already have
+    # passed the sensor when the stop is delayed). False on v2.0 (field missing).
+    autostopped: bool = False
 
 
 @dataclass(frozen=True)
@@ -125,7 +128,8 @@ def parse_status(payload: bytes | str) -> ConveyorStatus:
         raise ValueError(f"STATUS không hợp lệ: {raw!r}")
     state, speed, sensor, count, auto, delay = match.groups()[:6]
     return ConveyorStatus(
-        state, int(speed), sensor == "1", int(count), auto == "1", int(delay), raw
+        state, int(speed), sensor == "1", int(count), auto == "1", int(delay), raw,
+        match.group(10) == "1",
     )
 
 

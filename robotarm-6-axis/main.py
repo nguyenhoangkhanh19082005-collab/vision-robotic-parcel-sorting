@@ -14,8 +14,30 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+# 24/11/2026: PyQt6 GỌI abort() (app tắt ngay, không báo gì) khi một slot/timer ném exception chưa bắt.
+# Bộ bắt lỗi toàn cục: ghi traceback vào logs/gui_errors.log + in ra console, app KHÔNG tắt.
+GUI_ERROR_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "gui_errors.log")
+
+
+def _gui_excepthook(exc_type, exc, tb):
+    import traceback
+    text = "".join(traceback.format_exception(exc_type, exc, tb))
+    try:
+        os.makedirs(os.path.dirname(GUI_ERROR_LOG), exist_ok=True)
+        with open(GUI_ERROR_LOG, "a", encoding="utf-8") as fh:
+            fh.write(f"\n===== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} =====\n{text}")
+    except Exception:
+        pass
+    try:
+        print("[LỖI GUI - đã bắt, app tiếp tục chạy]\n" + text, file=sys.stderr)
+    except Exception:
+        pass
+
+
+sys.excepthook = _gui_excepthook
+
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QTreeWidgetItem, QMenu
+    QApplication, QMainWindow, QTreeWidgetItem, QMenu, QInputDialog, QMessageBox
 )
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QAction
@@ -27,6 +49,9 @@ from donghoc import kinematic, dh_params  # noqa: F401 (giữ tương thích scr
 from kinematics_poe import build_model_from_robot_project
 
 DEFAULT_URDF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ROBOTARM2_description")
+# 24/11/2026: chương trình RECORD (dạy tay → phát lại) lưu tại đây, tự nạp lại khi mở app.
+RECORD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "programs", "record_demo.json")
+TOOL_TXT = {0: "TẮT", 1: "HÚT", 2: "NHẢ"}
 
 
 class WorldClassRoboDKApp(QMainWindow):
@@ -45,10 +70,21 @@ class WorldClassRoboDKApp(QMainWindow):
         except ImportError:
             _tool_mm = 30.0
         self.kin = build_model_from_robot_project(os.path.dirname(os.path.abspath(__file__)), tool_length_m=_tool_mm / 1000.0)
+        # 24/11/2026: J2 khóa cứng (donghoc.J2_LOCK_DEG, firmware J2_HARD_LOCK) → IK/MoveL chỉ dùng J1, J3–J6;
+        # đầu hút được nghiêng tối đa max_tool_tilt_deg khi không giữ được thẳng đứng.
+        try:
+            import donghoc as _dh
+            if getattr(_dh, "J2_LOCK_DEG", None) is not None:
+                self.kin.max_tool_tilt_deg = 15.0
+                self.kin.lock_joint(1, float(_dh.J2_LOCK_DEG))
+        except Exception as _e:
+            print(f"[main] Không khóa được J2 trong IK: {_e}")
 
         # 3. KHỞI TẠO KẾT NỐI MẠNG LAN UDP (W5500)
         self.comm = RobotCommunicator(ip="192.168.1.177", port=8888)
         self.tool_state = 0
+        self._rec_tool = 0          # trạng thái giác hút do NGƯỜI DÙNG bấm gần nhất → gắn vào điểm record kế tiếp
+        self._playing = False
         self.saved_waypoints_data = []
 
         # 4. NHÚNG MÔ PHỎNG 3D VÀO WORKCELL VIEWPORT
@@ -79,6 +115,7 @@ class WorldClassRoboDKApp(QMainWindow):
 
         self.sync_system_pose()
         
+        self._load_record_program()
         # 8. CẤU HÌNH VỊ TRÍ GỐC CỐ ĐỊNH (HOME ZERO CONFIG)
         self.home_config_path = os.path.join(os.path.dirname(__file__), "home_config.json")
         self.is_home_calibrated = self._load_home_config()
@@ -211,62 +248,236 @@ class WorldClassRoboDKApp(QMainWindow):
             else:
                 self.log_message(msg, "ERROR")
 
-    def handle_save_wp(self):
-        """Thêm Waypoint Target an toàn 100% không bao giờ văng app."""
-        q_deg = [slider.value() for slider in self.sliders]
-        if self.comm and self.comm.is_connected:
-            self.comm.send_rec_command(q_deg, self.tool_state)
+    # ================= RECORD / PLAYBACK (24/11/2026) =================
+    # Nhiều CHƯƠNG TRÌNH record có tên (mặc định "Sọt 1", "Sọt 2" — mỗi sọt một quỹ đạo gắp → thả riêng).
+    # Dạy tay: chọn chương trình đang ghi (chuột phải cây Waypoint Targets), kéo robot tới điểm, bấm HÚT/NHẢ nếu cần,
+    # rồi "Add Target". Mỗi điểm lưu 6 góc + trạng thái giác hút áp dụng KHI ĐÃ TỚI điểm đó.
+    # "Run Auto": chọn chương trình (hoặc chạy lần lượt tất cả) + số vòng; phát lại từ PC: gửi góc → chờ robot thật tới
+    # (telemetry) → bật/tắt giác hút → điểm sau. Twin chạy cùng nhịp (đẹp cho video demo). Lưu ở RECORD_FILE.
 
-        wp_id = len(self.saved_waypoints_data) + 1
-        wp_text = f"Target {wp_id:02d} | J:[{q_deg[0]:.0f}°, {q_deg[1]:.0f}°, {q_deg[2]:.0f}°, {q_deg[3]:.0f}°, {q_deg[4]:.0f}°, {q_deg[5]:.0f}°]"
-        self.saved_waypoints_data.append(wp_text)
-        
-        # THÊM MỤC VÀO CÂY TRẠM ROBODK AN TOÀN TRỰC TIẾP
-        if hasattr(self.ui, 'target_root_item') and self.ui.target_root_item:
-            target_item = QTreeWidgetItem(["🎯 " + wp_text])
-            target_item.setData(0, Qt.ItemDataRole.UserRole, q_deg) # Lưu góc vào item
-            self.ui.target_root_item.addChild(target_item)
+    def _record_items(self):
+        root = getattr(self.ui, "target_root_item", None)
+        if root is None:
+            return []
+        items = [root.child(i) for i in range(root.childCount())]
+        return [it for it in items if isinstance(it.data(0, Qt.ItemDataRole.UserRole), dict)]
+
+    @staticmethod
+    def _record_text(data):
+        return (f"{data['name']} | {TOOL_TXT.get(int(data['tool']), '?')} | J:["
+                + ", ".join(f"{v:.1f}" for v in data["q"]) + "]")
+
+    def _sync_programs_from_tree(self):
+        """Danh sách điểm trên cây = chương trình đang chọn."""
+        self._programs[self._active_prog] = [dict(it.data(0, Qt.ItemDataRole.UserRole)) for it in self._record_items()]
+
+    def _show_program(self, name):
+        """Đổi chương trình đang ghi/hiển thị trên cây Waypoint Targets."""
+        if getattr(self, "_programs", None) is None:
+            return
+        root = getattr(self.ui, "target_root_item", None)
+        self._active_prog = name
+        self._programs.setdefault(name, [])
+        if root is not None:
+            for it in self._record_items():
+                root.removeChild(it)
+            root.setText(0, f"🎯 Waypoint Targets — [{name}]")
+            for d in self._programs[name]:
+                item = QTreeWidgetItem(["🎯 " + self._record_text(d)])
+                item.setData(0, Qt.ItemDataRole.UserRole, dict(d))
+                root.addChild(item)
             self.ui.tree_station.expandAll()
-            self.log_message(f"RoboDK Add Target: Đã thêm Waypoint Target #{wp_id} vào Trạm Station 1", "INFO")
-        else:
-            self.log_message(f"Đã lưu Waypoint Target #{wp_id}", "INFO")
+
+    def _save_record_program(self):
+        try:
+            self._sync_programs_from_tree()
+            os.makedirs(os.path.dirname(RECORD_FILE), exist_ok=True)
+            with open(RECORD_FILE, "w", encoding="utf-8") as fh:
+                json.dump({"version": 2, "active": self._active_prog, "programs": self._programs},
+                          fh, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.log_message(f"Không lưu được chương trình record: {e}", "ERROR")
+
+    def _load_record_program(self):
+        self._programs = {"Sọt 1": [], "Sọt 2": []}
+        self._active_prog = "Sọt 1"
+        if os.path.isfile(RECORD_FILE):
+            try:
+                with open(RECORD_FILE, encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                if "programs" in raw:
+                    self._programs = {str(k): list(v) for k, v in raw["programs"].items()} or self._programs
+                    self._active_prog = raw.get("active") if raw.get("active") in self._programs else next(iter(self._programs))
+                else:                                   # bản 1 chương trình cũ → "Sọt 1"
+                    self._programs["Sọt 1"] = list(raw.get("points", []))
+                n = sum(len(v) for v in self._programs.values())
+                self.log_message(f"Đã nạp {len(self._programs)} chương trình record ({n} điểm) từ {RECORD_FILE}", "INFO")
+            except Exception as e:
+                self.log_message(f"Không đọc được {RECORD_FILE}: {e}", "ERROR")
+        self._show_program(self._active_prog)
+
+    def handle_save_wp(self):
+        """RECORD: ghi tư thế lệnh hiện tại + trạng thái giác hút vào chương trình đang chọn."""
+        if self._playing:
+            return
+        n = len(self._record_items()) + 1
+        data = {"name": f"P{n:02d}", "q": [float(v) for v in self._current_q()], "tool": int(self._rec_tool)}
+        if getattr(self.ui, "target_root_item", None) is not None:
+            item = QTreeWidgetItem(["🎯 " + self._record_text(data)])
+            item.setData(0, Qt.ItemDataRole.UserRole, data)
+            self.ui.target_root_item.addChild(item)
+            self.ui.tree_station.expandAll()
+        if self._rec_tool == 2:
+            self._rec_tool = 0      # NHẢ chỉ áp dụng 1 lần tại điểm thả
+        self._save_record_program()
+        self.log_message(f"⏺ Record [{self._active_prog}]: {self._record_text(data)}", "INFO")
 
     def handle_tree_double_click(self, item, column):
-        """Kích đúp vào một Target trên Cây Trạm để tự động đưa Robot tới vị trí đó."""
-        q_deg = item.data(0, Qt.ItemDataRole.UserRole)
-        if q_deg and len(q_deg) == 6:
-            for i in range(6):
-                self.sliders[i].setValue(int(q_deg[i]))
-            self.log_message(f"RoboDK MoveJ Target: Đã di chuyển robot tới {item.text(0)}", "INFO")
+        """Kích đúp vào một điểm record trên Cây Trạm để đưa robot tới đó."""
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if isinstance(data, dict) and not self._playing:
+            self._set_joints_exact(data["q"])
+            self.flush_exact()
+            self.log_message(f"MoveJ tới {item.text(0)}", "INFO")
+
+    def flush_exact(self):
+        """Gửi ngay góc lệnh chính xác (kể cả phần thập phân) tới ESP32."""
+        if self.comm and self.comm.is_connected:
+            self.comm.send_pc_command(self._current_q(), self.tool_state, force=True)
+            self.has_pending_tx = False
 
     def show_tree_context_menu(self, position):
-        """Menu chuột phải trên Cây Trạm RoboDK."""
+        """Menu chuột phải: chọn/tạo/đổi tên chương trình; đi tới / ghi đè / xóa điểm; xóa chương trình."""
         item = self.ui.tree_station.itemAt(position)
-        if item and "Target" in item.text(0):
-            menu = QMenu(self)
-            act_move = menu.addAction("🔄 Move Robot To Target")
-            act_update = menu.addAction("📝 Update Target to Current Pose")
-            act_delete = menu.addAction("❌ Delete Target")
-
-            action = menu.exec(self.ui.tree_station.mapToGlobal(position))
-            if action == act_move:
-                self.handle_tree_double_click(item, 0)
-            elif action == act_update:
-                q_deg = [s.value() for s in self.sliders]
-                item.setData(0, Qt.ItemDataRole.UserRole, q_deg)
-                self.log_message(f"Đã cập nhật vị trí cho {item.text(0)}", "INFO")
-            elif action == act_delete:
-                parent = item.parent()
-                if parent:
-                    parent.removeChild(item)
-                    self.log_message(f"Đã xóa target khỏi Trạm", "WARNING")
+        if item is None or self._playing:
+            return
+        is_point = isinstance(item.data(0, Qt.ItemDataRole.UserRole), dict)
+        is_root = item is getattr(self.ui, "target_root_item", None)
+        if not (is_point or is_root):
+            return
+        menu = QMenu(self)
+        sub = menu.addMenu(f"📂 Chương trình đang ghi: {self._active_prog}")
+        pick_actions = {}
+        for name in self._programs:
+            act = sub.addAction(("✔ " if name == self._active_prog else "   ") + f"{name} ({len(self._programs[name])} điểm)")
+            pick_actions[act] = name
+        act_new = menu.addAction("➕ Tạo chương trình mới")
+        act_rename = menu.addAction("✏ Đổi tên chương trình này")
+        menu.addSeparator()
+        act_move = act_update = act_delete = None
+        if is_point:
+            act_move = menu.addAction("🔄 Đi tới điểm này")
+            act_update = menu.addAction("📝 Ghi đè bằng tư thế hiện tại")
+            act_delete = menu.addAction("❌ Xóa điểm")
+        act_clear = menu.addAction(f"🗑 Xóa toàn bộ điểm của [{self._active_prog}]")
+        act_drop = menu.addAction(f"🗑 Xóa hẳn chương trình [{self._active_prog}]")
+        action = menu.exec(self.ui.tree_station.mapToGlobal(position))
+        if action is None:
+            return
+        if action in pick_actions:
+            self._sync_programs_from_tree()
+            self._show_program(pick_actions[action])
+            self._save_record_program()
+            self.log_message(f"Đang ghi vào chương trình [{self._active_prog}]", "INFO")
+        elif action == act_new:
+            name, ok = QInputDialog.getText(self, "Chương trình mới", "Tên (ví dụ: Sọt 3):")
+            name = name.strip()
+            if ok and name and name not in self._programs:
+                self._sync_programs_from_tree()
+                self._show_program(name)
+                self._save_record_program()
+        elif action == act_rename:
+            name, ok = QInputDialog.getText(self, "Đổi tên", "Tên mới:", text=self._active_prog)
+            name = name.strip()
+            if ok and name and name not in self._programs:
+                self._sync_programs_from_tree()
+                self._programs[name] = self._programs.pop(self._active_prog)
+                self._show_program(name)
+                self._save_record_program()
+        elif action == act_move:
+            self.handle_tree_double_click(item, 0)
+        elif action == act_update:
+            data = item.data(0, Qt.ItemDataRole.UserRole)
+            data["q"] = self._current_q()
+            data["tool"] = int(self._rec_tool)
+            item.setData(0, Qt.ItemDataRole.UserRole, data)
+            item.setText(0, "🎯 " + self._record_text(data))
+            self._save_record_program()
+            self.log_message(f"Đã ghi đè {data['name']} [{self._active_prog}]", "INFO")
+        elif action == act_delete:
+            item.parent().removeChild(item)
+            self._save_record_program()
+            self.log_message("Đã xóa điểm record", "WARNING")
+        elif action == act_clear:
+            if QMessageBox.question(self, "Xóa điểm", f"Xóa toàn bộ điểm của [{self._active_prog}]?") == QMessageBox.StandardButton.Yes:
+                for it in self._record_items():
+                    it.parent().removeChild(it)
+                self._save_record_program()
+                self.log_message(f"Đã xóa toàn bộ điểm của [{self._active_prog}]", "WARNING")
+        elif action == act_drop:
+            if len(self._programs) <= 1:
+                self.log_message("Phải còn ít nhất 1 chương trình", "WARNING")
+            elif QMessageBox.question(self, "Xóa chương trình", f"Xóa hẳn chương trình [{self._active_prog}]?") == QMessageBox.StandardButton.Yes:
+                self._programs.pop(self._active_prog)
+                self._show_program(next(iter(self._programs)))
+                self._save_record_program()
 
     def handle_run_auto(self):
-        if self.comm and self.comm.is_connected:
-            self.comm.play_sequence()
-            self.log_message("▶ RoboDK Run Program: Bắt đầu thực thi chương trình tự động trên robot thật", "INFO")
-        else:
-            self.log_message("▶ Chạy tự động trong môi trường mô phỏng RoboDK 3D", "WARNING")
+        """PLAYBACK: chọn chương trình (hoặc lần lượt tất cả) + số vòng; chạy từ PC (robot thật + twin đồng bộ)."""
+        if self._playing:
+            return
+        self._sync_programs_from_tree()
+        names = [n for n, pts in self._programs.items() if pts]
+        if not names:
+            self.log_message("Chưa có điểm record: kéo robot tới điểm rồi bấm 'Add Target'.", "WARNING")
+            return
+        ALL = "▶ Lần lượt tất cả (" + " → ".join(names) + ")"
+        choices = names + ([ALL] if len(names) > 1 else [])
+        start = names.index(self._active_prog) if self._active_prog in names else 0
+        choice, ok = QInputDialog.getItem(self, "Run Auto", "Chạy chương trình:", choices, start, False)
+        if not ok:
+            return
+        loops, ok = QInputDialog.getInt(self, "Run Auto", "Số vòng:", 1, 1, 100)
+        if not ok:
+            return
+        order = names if choice == ALL else [choice]
+        live = bool(self.comm and self.comm.is_connected)
+        self.log_message(f"▶ Playback {' → '.join(order)} × {loops} vòng ({'robot thật' if live else 'chỉ mô phỏng'})", "INFO")
+        self._playing = True
+        self._abort_wait = False
+        stopped = False
+        try:
+            for n in range(loops):
+                for prog in order:
+                    for p in self._programs[prog]:
+                        if self._abort_wait:
+                            stopped = True
+                            break
+                        self.log_message(f"Vòng {n + 1}/{loops} – [{prog}] {p['name']} ({TOOL_TXT.get(p['tool'], '?')})", "INFO")
+                        self._set_joints_exact(p["q"])
+                        self.flush_exact()
+                        if not self._wait_robot_reached(fallback_s=1.2):
+                            stopped = True
+                            break
+                        if int(p["tool"]) != self.tool_state:
+                            self.handle_tool_control(int(p["tool"]), user=False)
+                            self._sleep_ui(0.8)        # chờ giác hút bám / nhả hẳn
+                        else:
+                            self._sleep_ui(0.15)
+                    if stopped:
+                        break
+                if stopped:
+                    break
+        finally:
+            self._playing = False
+        self.log_message("⏹ Playback dừng giữa chừng" if stopped else "✅ Playback xong",
+                         "WARNING" if stopped else "INFO")
+
+    def _sleep_ui(self, seconds):
+        t_end = time.time() + seconds
+        while time.time() < t_end and not getattr(self, "_abort_wait", False):
+            QApplication.processEvents()
+            time.sleep(0.02)
 
     def handle_stop(self):
         self._abort_wait = True
@@ -416,12 +627,33 @@ class WorldClassRoboDKApp(QMainWindow):
         self._save_home_config(False)
         self.log_message("🔓 ĐÃ MỞ KHÓA THIẾT LẬP GỐC: Bạn có thể chỉnh lại tư thế cánh tay và bấm '🎯 Lưu Gốc (Flash)' để lưu mốc mới vào Flash.", "WARNING")
 
-    def handle_tool_control(self, state):
+    def handle_tool_control(self, state, user=True):
         self.tool_state = state
+        if user:
+            self._rec_tool = state   # điểm record kế tiếp sẽ mang trạng thái này
+        txt = {0: "TẮT", 1: "HÚT", 2: "NHẢ"}[state]
         if self.comm and self.comm.is_connected:
             self.comm.send_tool_action(state)
-            txt = {0: "TẮT", 1: "HÚT", 2: "NHẢ"}[state]
-            self.log_message(f"Tool Gripper Action: Gửi lệnh {txt}", "INFO")
+            self.log_message(f"Giác hút: gửi lệnh {txt}", "INFO")
+        else:
+            self._show_tool_state(state, live=False)
+            self.log_message(f"Giác hút: {txt} (chưa kết nối robot — chỉ mô phỏng)", "WARNING")
+        if state == 2:
+            # 24/11/2026: firmware tự đóng van sau 0.6 s; GUI về TẮT để các lệnh MOVE sau không mang trạng thái NHẢ
+            QTimer.singleShot(800, lambda: self.tool_state == 2 and self.handle_tool_control(0, user=False))
+
+    def _show_tool_state(self, state, live=True):
+        """Đèn trạng thái giác hút trên GUI: live = theo telemetry robot, ngược lại = theo lệnh."""
+        if not hasattr(self.ui, "lbl_tool_status"):
+            return
+        text, color = {1: ("● ĐANG HÚT", "#22C55E"), 2: ("● ĐANG NHẢ", "#F59E0B")}.get(int(state), ("● TẮT", "#9CA3AF"))
+        self.ui.lbl_tool_status.setText(text)
+        self.ui.lbl_tool_status.setStyleSheet(f"color: {color}; font-weight: 800;")
+        self.ui.lbl_tool_hint.setText("Trạng thái thật từ robot (telemetry)." if live else "Chưa kết nối robot: hiển thị theo lệnh.")
+        if getattr(self, "_shown_tool_state", None) != int(state):
+            self._shown_tool_state = int(state)
+            if getattr(self, "sim", None) is not None and hasattr(self.sim, "set_tool_state"):
+                self.sim.set_tool_state(int(state))
 
     def handle_ik_move(self):
         """Lệnh MoveL: Giải Động học nghịch Pieper IK từ ô nhập TCP."""
@@ -584,6 +816,8 @@ class WorldClassRoboDKApp(QMainWindow):
                 self._last_actual = (time.time(), list(angles))
                 for i in range(6):
                     self.lbl_feedbacks[i].setText(f"Act: {angles[i]:.1f}°")
+            if "tool_state" in feedback:
+                self._show_tool_state(feedback["tool_state"], live=True)
 
             # Tự động đồng bộ trạng thái mốc gốc từ Flash NVS của ESP32-S3
             is_calib = feedback.get("is_calibrated", False)

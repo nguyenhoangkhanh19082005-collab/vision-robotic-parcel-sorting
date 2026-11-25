@@ -75,8 +75,9 @@ def main() -> int:
         window.close()
         app.quit()
 
-    schedule = [(800, step_operator), (4500, mid_cycle), (16000, after_cycle), (17500, twin_tab),
-                (19000, robot_tab), (20500, sorting_tab), (21500, conveyor_tab)]
+    # 23/11/2026: HOME = dựng thẳng đứng (q = 0) → chu trình 9 °/s dài ≈ 30–40 s (J3 0 → 107° mất ≈ 12 s mỗi lượt)
+    schedule = [(800, step_operator), (8000, mid_cycle), (50000, after_cycle), (51500, twin_tab),
+                (53000, robot_tab), (54500, sorting_tab), (55500, conveyor_tab)]
     for delay, func in schedule:
         QTimer.singleShot(delay, func)
     app.exec()

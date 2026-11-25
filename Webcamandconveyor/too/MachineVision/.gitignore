@@ -12,7 +12,9 @@ dataset/analysis/
 work/
 team-share/
 exports/
-logs/
+# Logs: keep only the work log
+logs/*
+!logs/CHANGELOG.md
 build/
 dist/
 *.egg-info/
@@ -43,3 +45,12 @@ tmp/
 dataset/station/
 assets/logo/*_backup_*.png
 models/hf/
+
+# Firmware build output: keep only the .bin files
+firmware/**/export/*.elf
+firmware/**/export/*.map
+
+# 2026-11-25: recorded belt runs show real shipping labels (names, phones) and are large
+dataset/station_runs/
+# Local backups made before each change
+.bak_*/

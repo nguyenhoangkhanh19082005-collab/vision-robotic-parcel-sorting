@@ -190,7 +190,7 @@ def test_taught_pose_overrides_ik_and_persists(qt_app, model, station_config, tm
     from sorting_station.sorting import PoseLibrary
 
     seq, *_ = _build(qt_app, model, station_config, FakeRobot(), FakeConveyor(), tmp_path=tmp_path)
-    taught = [5.0, 20.0, 25.0, -10.0, -40.0, 0.0]
+    taught = [5.0, 0.0, 20.0, -10.0, 15.0, 0.0]   # 24/11/2026: trong giới hạn tư thế 0 chữ L (J5 ≥ -20°)
     seq.poses.teach("pick", taught)
     assert seq.poses.resolve("pick", [0] * 6) == taught
     again = PoseLibrary(model, seq.settings, tmp_path / "taught.json")

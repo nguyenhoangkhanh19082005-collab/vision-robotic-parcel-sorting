@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "machine-vision-sorter"
-version = "0.3.0"
+version = "0.4.0"
 description = "Machine-vision station for parcel QR/logo reading and damage classification."
 requires-python = ">=3.11"
 dependencies = [

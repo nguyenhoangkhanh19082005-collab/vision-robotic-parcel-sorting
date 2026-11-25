@@ -404,7 +404,17 @@ class RoboDKStyleUI(object):
         self.lbl_feedbacks = []
 
         joint_names = ["Waist (J1)", "Shoulder (J2)", "Elbow (J3)", "Wrist Roll (J4)", "Wrist Pitch (J5)", "Wrist Yaw (J6)"]
-        joint_ranges = [(-170, 170), (-90, 110), (-150, 150), (-180, 180), (-110, 110), (-360, 360)]
+        # 24/11/2026: lấy giới hạn từ donghoc (tư thế 0 chữ L đầu hút chúc xuống); J2 khóa cứng → slider J2 khóa ở góc khóa
+        try:
+            import donghoc as _dh
+            joint_ranges = [(int(lo), int(hi)) for lo, hi in _dh.kinematic().joint_limits]
+            j2_lock = getattr(_dh, "J2_LOCK_DEG", None)
+        except Exception:
+            joint_ranges = [(-170, 170), (-90, 110), (-225, 45), (-180, 180), (-20, 200), (-360, 360)]
+            j2_lock = 0.0
+        if j2_lock is not None:
+            joint_ranges[1] = (int(round(j2_lock)), int(round(j2_lock)))
+            joint_names[1] = f"Shoulder (J2) 🔒 {j2_lock:g}°"
 
         for i in range(6):
             j_box = QVBoxLayout()
@@ -426,6 +436,9 @@ class RoboDKStyleUI(object):
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(joint_ranges[i][0], joint_ranges[i][1])
             slider.setValue(0)
+            if i == 1 and j2_lock is not None:   # J2 khóa cứng: không cho kéo
+                slider.setEnabled(False)
+                spin.setEnabled(False)
             j_box.addWidget(slider)
 
             joint_layout.addLayout(j_box)
@@ -563,17 +576,31 @@ class RoboDKStyleUI(object):
         tool_card = QFrame()
         tool_card.setStyleSheet("background-color: #121319; border-radius: 6px; padding: 6px;")
         tool_lay = QVBoxLayout(tool_card)
-        tool_lay.addWidget(QLabel("END-EFFECTOR TOOL (VACUUM PUMP)"))
+        # 24/11/2026: giác hút = bơm chân không + van điện từ qua L298N (GPIO10 bơm, GPIO11 van — xem firmware).
+        t_head = QHBoxLayout()
+        lbl_tool_title = QLabel("GIÁC HÚT (BƠM + VAN ĐIỆN TỪ)")
+        lbl_tool_title.setStyleSheet("color: #E5E7EB; font-weight: 800;")
+        self.lbl_tool_status = QLabel("● TẮT")
+        self.lbl_tool_status.setStyleSheet("color: #9CA3AF; font-weight: 800;")
+        t_head.addWidget(lbl_tool_title); t_head.addStretch(); t_head.addWidget(self.lbl_tool_status)
+        tool_lay.addLayout(t_head)
 
         t_btn_lay = QHBoxLayout()
-        self.btn_tool_off = QPushButton("OFF (0)")
-        self.btn_tool_suck = QPushButton("SUCK (1)")
-        self.btn_tool_suck.setProperty("class", "BtnPrimary")
-        self.btn_tool_release = QPushButton("RELEASE (2)")
-        self.btn_tool_release.setProperty("class", "BtnWarning")
-
-        t_btn_lay.addWidget(self.btn_tool_off); t_btn_lay.addWidget(self.btn_tool_suck); t_btn_lay.addWidget(self.btn_tool_release)
+        self.btn_tool_suck = QPushButton("🟢 HÚT")
+        self.btn_tool_suck.setToolTip("Bật bơm hút, đóng van xả (giữ vật)")
+        self.btn_tool_release = QPushButton("🟠 NHẢ")
+        self.btn_tool_release.setToolTip("Tắt bơm, mở van xả chân không ~0.6 s rồi tự tắt")
+        self.btn_tool_off = QPushButton("⏹ TẮT")
+        self.btn_tool_off.setToolTip("Tắt bơm và van")
+        for btn, bg in ((self.btn_tool_suck, "#16A34A"), (self.btn_tool_release, "#D97706"), (self.btn_tool_off, "#374151")):
+            btn.setMinimumHeight(38)
+            btn.setStyleSheet(f"QPushButton {{ background-color: {bg}; color: #FFFFFF; font-weight: 800; "
+                              f"border-radius: 5px; padding: 6px; }} QPushButton:hover {{ border: 2px solid #E5E7EB; }}")
+            t_btn_lay.addWidget(btn)
         tool_lay.addLayout(t_btn_lay)
+        self.lbl_tool_hint = QLabel("Trạng thái lấy từ robot (telemetry) khi đã kết nối.")
+        self.lbl_tool_hint.setStyleSheet("color: #6B7280; font-size: 11px;")
+        tool_lay.addWidget(self.lbl_tool_hint)
         right_layout.addWidget(tool_card)
 
         body_splitter.addWidget(right_panel)

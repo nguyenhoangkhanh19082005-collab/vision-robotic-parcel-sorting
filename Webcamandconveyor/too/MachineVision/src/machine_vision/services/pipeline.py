@@ -9,7 +9,14 @@ import numpy as np
 from machine_vision.imaging.enhancement import crop_fraction, enhance_for_display
 from machine_vision.imaging.focus import assess_focus, is_acceptable
 from machine_vision.imaging.perspective import rectify_from_qr_anchor, rectify_label
-from machine_vision.models import FocusMetrics, InspectionResult, PackageDetection, ParcelData
+from machine_vision.models import (
+    DamageAssessment,
+    FocusMetrics,
+    InspectionResult,
+    LogoAssessment,
+    PackageDetection,
+    ParcelData,
+)
 from machine_vision.readers.logo_reader import LogoDetector
 from machine_vision.readers.qr_reader import QrReader
 from machine_vision.services.classifier import ParcelClassifier
@@ -127,7 +134,7 @@ class VisionPipeline:
             if np.isfinite(metrics.motion):
                 score = metrics.laplacian + 0.02 * metrics.tenengrad
                 if best_measured is None or score > best_measured[0]:
-                    best_measured = (score, metrics)
+                    best_measured = (score, metrics, frame)
             if is_acceptable(metrics, acquisition):
                 consecutive_stable += 1
                 if consecutive_stable < required_stable:
@@ -139,6 +146,11 @@ class VisionPipeline:
                 consecutive_stable = 0
         if best is None:
             measured = best_measured[1] if best_measured is not None else None
+            # QR-only station (2026-11-23): whether the QR decodes is the real test,
+            # so a frame below the focus gate is still read instead of rejected. A
+            # good label with little print measured Tenengrad 255 < 280 on the belt.
+            if best_measured is not None and not acquisition.get("quality_gate_blocks", True):
+                return best_measured[2].copy(), measured
             raise self._quality_error(measured)
         return best[1], best[2]
 
@@ -216,19 +228,58 @@ class VisionPipeline:
             raise RuntimeError("Logo detector does not support operator calibration")
         return calibrate(label, roi)
 
+    def qr_read_ratio(self, frames: list[np.ndarray], anchor) -> float | None:
+        """Decode the QR region of every burst frame; return the share that agrees.
+
+        Only a crop around the QR found in the best frame is decoded (~20 ms per
+        frame instead of ~200 ms on the full 2K frame).
+        """
+        if anchor is None or anchor.corners is None or not frames:
+            return None
+        corners = np.asarray(anchor.corners, dtype=np.float32).reshape(-1, 2)
+        side = float(np.linalg.norm(corners.max(axis=0) - corners.min(axis=0))) / np.sqrt(2)
+        pad = 0.6 * side
+        x0, y0 = np.maximum(corners.min(axis=0) - pad, 0).astype(int)
+        x1, y1 = (corners.max(axis=0) + pad).astype(int)
+        hits = 0
+        for item in frames:
+            read = self.qr_reader.read(item[y0:y1, x0:x1])
+            hits += int(read is not None and read.text == anchor.text)
+        return hits / len(frames)
+
     def inspect(self, frames: Iterable[np.ndarray]) -> InspectionResult:
+        frames = list(frames)
         frame, metrics = self.choose_best_frame(frames)
         full_frame_qr = self.qr_reader.read(frame)
+        if full_frame_qr is None:
+            # The sharpest frame (by global focus) may still hold a blurred or covered
+            # QR: try a few others so an intermittent QR reaches the read-ratio check.
+            others = [item for item in frames if item is not frame]
+            for item in others[: int(self.config.get("qr", {}).get("extra_frame_attempts", 2))]:
+                full_frame_qr = self.qr_reader.read(item)
+                if full_frame_qr is not None:
+                    frame = item
+                    break
         package = self.package_detector.detect(
             frame,
             full_frame_qr.corners if full_frame_qr is not None else None,
         )
-        damage, damage_debug = self.damage_detector.inspect(frame, package)
+        if self.config.get("damage", {}).get("enabled", True):
+            damage, damage_debug = self.damage_detector.inspect(frame, package)
+        else:
+            # 2026-11-23: the station judges only the QR (readable or not).
+            damage = DamageAssessment(False, None, reason="Không kiểm tra hư hỏng (damage.enabled: false)")
+            damage_debug = {}
         label_cfg = self.config["label"]
         label, anchor_qr, display_label = self._prepare_label(frame, full_frame_qr, display=True)
         qr_image = crop_fraction(label, label_cfg["qr_roi"])
         qr = full_frame_qr or self.qr_reader.read(qr_image) or anchor_qr
-        logo, logo_image = self.logo_detector.detect(label)
+        if self.config.get("logo", {}).get("enabled", True):
+            logo, logo_image = self.logo_detector.detect(label)
+        else:
+            # Logo check switched off (2026-11-23: the station sorts on the QR only).
+            logo = LogoAssessment(False, None, reason="Không kiểm tra logo (logo.enabled: false)")
+            logo_image = label
         waybill = find_waybill_in_qr(qr.text if qr else None)
 
         parcel = ParcelData(
@@ -236,6 +287,7 @@ class VisionPipeline:
             waybill_code=waybill,
             logo=logo,
             damage=damage,
+            qr_read_ratio=self.qr_read_ratio(frames, full_frame_qr) if qr else None,
         )
         classification = self.classifier.classify(parcel)
         debug_images = {

@@ -57,3 +57,6 @@ research/cad_cache_moi/
 assets/**/Roboter*.step
 # Bản sao lưu tạm
 *.bak
+
+# Lắp ráp toàn trạm 124 MB (vượt 100 MB của GitHub): chỉ đưa bản nén .step.zip
+assets/CAD_tram_tong/Tram_phan_loai_tong.step

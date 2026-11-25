@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     # Import sau khi đã thêm đường dẫn hai dự án gốc vào sys.path
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
-    from machine_vision.app import build_pipeline
+    from machine_vision.app import build_pipeline, build_reporter
     from machine_vision.config import load_config
     from machine_vision.paths import asset_root, runtime_root
     from machine_vision.services.evidence import EvidenceWriter
@@ -56,13 +56,24 @@ def main(argv: list[str] | None = None) -> int:
     writable_root = runtime_root()
 
     app = QApplication(sys.argv if argv is None else ["sorting_station", *argv])
+    # Lăn chuột không đổi thanh trượt / ô số (khớp robot, PWM): machine_vision.ui.wheel_guard
+    from machine_vision.ui.wheel_guard import install_wheel_guard
+    guard = install_wheel_guard(app)  # noqa: F841 - sống cùng app
     pipeline, warning = build_pipeline(mv_config, project_root, writable_root)
     evidence = EvidenceWriter(mv_config.get("audit", {}), writable_root)
-    window = IntegratedMainWindow(mv_config, pipeline, evidence, project_root, station_config, paths)
+    # 2026-11-25: results reach the web (Supabase sorting_logs -> orders) only through
+    # this reporter; the integrated station used to start without one.
+    reporter = build_reporter(mv_config, writable_root)
+    window = IntegratedMainWindow(mv_config, pipeline, evidence, project_root, station_config, paths,
+                                  reporter=reporter)
     window.showMaximized()
     if warning:
         QMessageBox.warning(window, "Commissioning required", warning)
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        if reporter is not None:
+            reporter.close()
 
 
 if __name__ == "__main__":

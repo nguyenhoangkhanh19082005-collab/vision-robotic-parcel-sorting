@@ -65,17 +65,26 @@ class PackageDamageDetector:
         return self.reference is not None
 
     def save_bench_reference(self, frame: np.ndarray) -> Path:
-        self.bench_reference_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.bench_reference_path.with_name(
-            self.bench_reference_path.stem + ".tmp" + self.bench_reference_path.suffix
-        )
+        """Save the empty-scene reference of the ACTIVE mode (bench or conveyor).
+
+        Conveyor mode (2026-11-23): the camera trigger compares every frame with this
+        image, so it must be re-captured whenever the camera, lamp or belt moved.
+        """
+        conveyor = not self._bench_mode and bool(self.settings.get("background_path"))
+        target = self.reference_path if conveyor else self.bench_reference_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.stem + ".tmp" + target.suffix)
         if not cv2.imwrite(str(temporary), frame):
-            raise RuntimeError(f"Unable to save bench background: {self.bench_reference_path}")
-        temporary.replace(self.bench_reference_path)
-        self.bench_reference = frame.copy()
-        if self._bench_mode:
-            self.reference = self.bench_reference
-        return self.bench_reference_path
+            raise RuntimeError(f"Unable to save background: {target}")
+        temporary.replace(target)
+        if conveyor:
+            self.production_reference = frame.copy()
+            self.reference = self.production_reference
+        else:
+            self.bench_reference = frame.copy()
+            if self._bench_mode:
+                self.reference = self.bench_reference
+        return target
 
     @staticmethod
     def _clip_box(
@@ -256,9 +265,14 @@ class PackageDamageDetector:
         else:
             lx, ly, lw, lh = package.label_bbox
             cx, cy = lx + lw / 2, ly + lh / 2
-        parcel = self._segment_parcel(
-            frame, (int(cx), int(cy)), scale, label.mask if label is not None else None
-        )
+        if self.settings.get("check_parcel_surface", True):
+            parcel = self._segment_parcel(
+                frame, (int(cx), int(cy)), scale, label.mask if label is not None else None
+            )
+        else:
+            # 2026-11-23: station checks only the QR and the label (tear); carton
+            # dents/holes are out of scope, so no empty-belt reference is needed here.
+            parcel = {"valid": False, "code": "DISABLED", "reason": "không kiểm tra bề mặt thùng"}
         if scale is None and parcel.get("contour") is not None:
             # No QR geometry: use a fifth of the parcel size as the length unit.
             scale = 0.2 * np.sqrt(max(1.0, float(cv2.contourArea(parcel["contour"]))))

@@ -35,6 +35,11 @@ def test_parse_status_and_events():
     assert (status.state, status.speed, status.sensor, status.count, status.auto) == (
         "FWD", 150, True, 4, True,
     )
+    assert not status.autostopped                       # firmware v2.0: no ASTOP field
+    v21 = parse_status(
+        "STATUS:STOP:0:SENSOR=0:COUNT=4:AUTO=1:DELAY=1200:ISR=12:ISL=0:UP=99:ASTOP=1"
+    )
+    assert (v21.state, v21.sensor, v21.delay_ms, v21.autostopped) == ("STOP", False, 1200, True)
     assert parse_event("EVT:SENSOR:1:3:1200").values == (1, 3, 1200)
     assert parse_event("EVT:WATCHDOG_STOP").is_fault
     assert not parse_event("EVT:AUTOSTOP:3").is_fault

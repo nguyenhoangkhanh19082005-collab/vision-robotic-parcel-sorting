@@ -1,0 +1,20 @@
+
+== Đèn Ø200 mm (đã xuất) — chỉ liệt kê cặp cách nhau < 25 mm
+     0.0 mm  link_4_1  ↔ Den_ring_vong.stl                  thùng DONG_BANG q=[0.0, -8.8, 111.3, 0.0, -77.5, -0.0] VA CHẠM
+     0.0 mm  link_3_1  ↔ Gia_Tay_don_webcam_den.stl         thùng TRUNG_DU  q=[4.6, 53.2, 31.2, 0.0, -95.5, -0.0] VA CHẠM
+     0.0 mm  link_2_1  ↔ Den_ring_vong.stl                  thùng TRUNG_DU  q=[4.6, 55.5, 22.7, 0.0, -101.7, -0.0] VA CHẠM
+     0.0 mm  link_6_1  ↔ Gia_Tay_don_webcam_den.stl         thùng DONG_BANG q=[0.0, -7.6, 112.8, 0.0, -74.8, -0.0] VA CHẠM
+     0.0 mm  link_5_1  ↔ Webcam_C260 WebCam Assembly.stl    thùng DONG_BANG q=[0.0, -4.0, 117.2, 0.0, -66.7, 0.0] VA CHẠM
+     0.0 mm  link_5_1  ↔ Gia_Tay_don_webcam_den.stl         thùng DONG_BANG q=[0.0, -4.6, 116.5, 0.0, -68.0, 0.0] VA CHẠM
+     0.0 mm  link_6_1  ↔ Webcam_C260 WebCam Assembly.stl    thùng DONG_BANG q=[0.0, -5.8, 115.0, 0.0, -70.7, 0.0] VA CHẠM
+     0.0 mm  link_3_1  ↔ Den_ring_vong.stl                  thùng TRUNG_DU  q=[4.2, 52.0, 14.9, 0.0, -96.7, -0.0] VA CHẠM
+     0.0 mm  link_4_1  ↔ Gia_Tay_don_webcam_den.stl         thùng DONG_BANG q=[0.0, -8.8, 111.3, 0.0, -77.5, -0.0] VA CHẠM
+     0.0 mm  link_6_1  ↔ Den_ring_vong.stl                  thùng LOI       q=[10.3, -2.4, 97.9, 0.0, -84.4, -0.0] VA CHẠM
+     0.0 mm  link_5_1  ↔ Den_ring_vong.stl                  thùng DONG_BANG q=[0.0, -7.0, 113.5, 0.0, -73.4, 0.0] VA CHẠM
+     1.2 mm  link_3_1  ↔ Webcam_C260 WebCam Assembly.stl    thùng TRUNG_DU  q=[4.6, 57.2, 16.4, 0.0, -106.3, -0.0] VA CHẠM
+     9.1 mm  link_6_1  ↔ Gia_Thanh_ngang_tren.stl           thùng DONG_BANG q=[0.0, -4.0, 117.2, 0.0, -66.7, 0.0] sát
+    14.8 mm  link_4_1  ↔ Webcam_C260 WebCam Assembly.stl    thùng DONG_BANG q=[0.0, -4.6, 116.5, 0.0, -68.0, 0.0] sát
+    23.5 mm  link_5_1  ↔ Gia_Thanh_ngang_tren.stl           thùng DONG_BANG q=[0.0, -4.0, 117.2, 0.0, -66.7, 0.0] 
+    27.5 mm  link_2_1  ↔ Gia_Tay_don_webcam_den.stl         thùng TRUNG_DU  q=[4.6, 57.2, 16.4, 0.0, -106.3, -0.0] 
+    30.2 mm  link_4_1  ↔ Gia_Thanh_ngang_tren.stl           thùng DONG_BANG q=[0.0, -4.0, 117.2, 0.0, -66.7, 0.0] 
+    35.9 mm  link_2_1  ↔ Webcam_C260 WebCam Assembly.stl    thùng TRUNG_DU  q=[4.6, 57.2, 16.4, 0.0, -106.3, -0.0] 
