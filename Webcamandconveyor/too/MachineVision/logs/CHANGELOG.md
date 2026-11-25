@@ -1,5 +1,29 @@
 # CHANGELOG — MachineVision
 
+## 2026-11-25 — developer (chặn lăn chuột, hoàn thiện để nộp, đẩy lên GitHub)
+- Lỗi người vận hành báo: lăn chuột trên GUI làm thanh trượt (PWM băng tải, jog khớp robot ở tab Robot) đổi giá
+  trị. Khi robot đang kết nối, đây là một lệnh chuyển động ngoài ý muốn.
+  - Thêm `ui/wheel_guard.py`: bộ lọc sự kiện toàn ứng dụng chặn lăn chuột trên thanh trượt, ô số và ô chọn;
+    cú lăn được chuyển cho vùng cuộn chứa nó nên trang vẫn cuộn. Thanh cuộn không bị ảnh hưởng.
+  - Gắn vào `app.py` (MachineVision) và `SortingStation/sorting_station/app.py`.
+  - Thêm `tests/test_wheel_guard.py`.
+- Phiên bản 0.4.0. README cập nhật: chu trình tự động, gửi web, GUI mới, 184 test.
+- `.gitignore`:
+  - Thêm `dataset/station_runs/` (ảnh tem có thông tin cá nhân, 604 MB) và `.bak_*/`.
+  - Giữ `logs/CHANGELOG.md`.
+- Ảnh giao diện công khai `docs/images/gui_van_hanh.png`: khung camera chỉ có băng trống, không có tem.
+- SortingStation:
+  - Thêm `docs/HUONG_DAN_VAN_HANH.md` (bật trạm, chạy tự động, xử lý lỗi, quay video demo).
+  - README cập nhật.
+- robotarm-6-axis: nén `assets/CAD_tram_tong/Tram_phan_loai_tong.step` (124 MB, vượt 100 MB của GitHub) thành
+  `.step.zip` 23,8 MB; `.gitignore` bỏ qua file STEP gốc.
+- Đẩy lên GitHub (repo vision-robotic-parcel-sorting, nhánh main), commit 8b6c4b8:
+  - Chép bằng robocopy sang `E:\UDMT\_github\he-thong-phan-loai`, bỏ qua các thư mục nặng và có ảnh tem.
+  - Thay ID project Supabase bằng `<project-id>`.
+  - Quét không thấy key hay token; không có `.env` và ảnh tem.
+  - README tổng viết lại.
+- Test cuối: MachineVision 184/184, SortingStation 22/22.
+
 ## 2026-11-25 — developer (giao diện: một màn hình vận hành cho cả trạm)
 Vấn đề của giao diện cũ (dựng ngầm ở 1920×1080 để soát):
 - Nút Chạy tự động và Đã lấy kiện nằm ở tab "Băng tải / ESP32" (trang gần như trống). Trang Vận hành không
